@@ -1,12 +1,26 @@
+import { redirect } from "next/navigation";
+
+import LogoutButton from "@/components/auth/LogoutButton";
 import UploadAttendanceForm from "@/components/attendance/UploadAttendanceForm";
+import { isAuthenticated } from "@/lib/auth";
 
 export const metadata = {
   title: "Cargar Asistencia | Control de Asistencia",
 };
 
-export default function UploadsPage() {
+export default async function UploadsPage() {
+  const authenticated = await isAuthenticated();
+
+  if (!authenticated) {
+    redirect("/");
+  }
+
   return (
     <main className="mx-auto min-h-screen w-full max-w-7xl px-6 py-10 lg:px-10">
+      <div className="mb-6 flex justify-end">
+        <LogoutButton />
+      </div>
+
       <div className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr]">
         <section className="rounded-[2rem] border border-[var(--border)] bg-slate-950 p-8 text-slate-50 shadow-[0_24px_80px_rgba(15,23,42,0.18)]">
           <p className="text-sm uppercase tracking-[0.32em] text-amber-300">

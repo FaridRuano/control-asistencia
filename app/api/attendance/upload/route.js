@@ -9,6 +9,7 @@ import AttendanceUpload from "@/models/AttendanceUpload";
 import DailyAttendance from "@/models/DailyAttendance";
 import Employee from "@/models/Employee";
 import WorkSchedule from "@/models/WorkSchedule";
+import { isAuthenticated } from "@/lib/auth";
 
 function groupPunchesByDay(punches) {
   const grouped = new Map();
@@ -30,6 +31,15 @@ export async function POST(request) {
   let uploadDocument = null;
 
   try {
+    const authenticated = await isAuthenticated();
+
+    if (!authenticated) {
+      return NextResponse.json(
+        { error: "Sesión inválida o expirada." },
+        { status: 401 },
+      );
+    }
+
     await connectToDatabase();
 
     const formData = await request.formData();
