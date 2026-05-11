@@ -4,14 +4,24 @@ const employeeSchema = new Schema(
   {
     biometricCode: {
       type: String,
+      trim: true,
+      default: "",
+    },
+    fullName: {
+      type: String,
       required: true,
       unique: true,
       trim: true,
     },
-    name: {
+    salary: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    branch: {
       type: String,
-      required: true,
-      trim: true,
+      enum: ["AMBATO", "SALCEDO"],
+      default: "AMBATO",
     },
     department: {
       type: String,
@@ -25,6 +35,16 @@ const employeeSchema = new Schema(
   },
   {
     timestamps: true,
+  },
+);
+
+employeeSchema.index(
+  { biometricCode: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      biometricCode: { $type: "string", $ne: "" },
+    },
   },
 );
 

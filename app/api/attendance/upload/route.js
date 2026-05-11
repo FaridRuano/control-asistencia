@@ -1,43 +1,65 @@
 import { NextResponse } from "next/server";
-import { startOfDay } from "date-fns";
 
-import parseAttendanceFile from "@/lib/attendance/parseAttendanceFile";
-import calculateDailyAttendance from "@/lib/attendance/calculateDailyAttendance";
-import connectToDatabase from "@/lib/db/mongodb";
-import AttendancePunch from "@/models/AttendancePunch";
-import AttendanceUpload from "@/models/AttendanceUpload";
-import DailyAttendance from "@/models/DailyAttendance";
-import Employee from "@/models/Employee";
-import WorkSchedule from "@/models/WorkSchedule";
 import { isAuthenticated } from "@/lib/auth";
+import connectToDatabase from "@/lib/db/mongodb";
+import AttendanceUpload from "@/models/AttendanceUpload";
 
-function groupPunchesByDay(punches) {
-  const grouped = new Map();
+const ACCEPTED_EXTENSIONS = [".xls", ".xlsx"];
 
-  punches.forEach((punch) => {
-    const dateKey = startOfDay(punch.punchedAt).toISOString();
-
-    if (!grouped.has(dateKey)) {
-      grouped.set(dateKey, []);
-    }
-
-    grouped.get(dateKey).push(punch.punchedAt);
-  });
-
-  return grouped;
+function hasValidExcelExtension(fileName) {
+  const normalizedName = String(fileName || "").toLowerCase();
+  return ACCEPTED_EXTENSIONS.some((extension) => normalizedName.endsWith(extension));
 }
 
-export async function POST(request) {
-  let uploadDocument = null;
-
+export async function GET() {
   try {
     const authenticated = await isAuthenticated();
 
     if (!authenticated) {
-      return NextResponse.json(
-        { error: "Sesión inválida o expirada." },
-        { status: 401 },
-      );
+      return NextResponse.json({ error: "Sesión inválida o expirada." }, { status: 401 });
+    }
+
+    await connectToDatabase();
+
+    const uploads = await AttendanceUpload.find(
+      {},
+      {
+        originalFile: 0,
+      },
+    )
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .lean();
+
+    return NextResponse.json({
+      uploads: uploads.map((upload) => ({
+        id: upload._id.toString(),
+        fileName: upload.fileName,
+        mimeType: upload.mimeType,
+        fileSize: upload.fileSize,
+        status: upload.status,
+        month: upload.month,
+        year: upload.year,
+        normalizedAt: upload.normalizedAt || null,
+        hasNormalization: Boolean(upload.normalizedAt),
+        createdAt: upload.createdAt,
+        updatedAt: upload.updatedAt,
+      })),
+    });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error.message || "No se pudo cargar el historial de archivos." },
+      { status: 500 },
+    );
+  }
+}
+
+export async function POST(request) {
+  try {
+    const authenticated = await isAuthenticated();
+
+    if (!authenticated) {
+      return NextResponse.json({ error: "Sesión inválida o expirada." }, { status: 401 });
     }
 
     await connectToDatabase();
@@ -52,145 +74,48 @@ export async function POST(request) {
       );
     }
 
-    uploadDocument = await AttendanceUpload.create({
-      fileName: file.name,
-      status: "processing",
-    });
-
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const parsedFile = parseAttendanceFile({
-      buffer,
-      fileName: file.name,
-    });
-
-    const employeesPayload = [];
-    let totalDailyAttendances = 0;
-
-    for (const parsedEmployee of parsedFile.employees) {
-      const employeeDocument = await Employee.findOneAndUpdate(
-        { biometricCode: parsedEmployee.biometricCode },
-        {
-          biometricCode: parsedEmployee.biometricCode,
-          name: parsedEmployee.name,
-          department: parsedEmployee.department,
-          isActive: true,
-        },
-        {
-          new: true,
-          upsert: true,
-          setDefaultsOnInsert: true,
-        },
+    if (!hasValidExcelExtension(file.name)) {
+      return NextResponse.json(
+        { error: "Solo se permiten archivos .xls o .xlsx." },
+        { status: 400 },
       );
-
-      const punchDocuments = parsedEmployee.punches.map((punch) => ({
-        upload: uploadDocument._id,
-        employee: employeeDocument._id,
-        punchedAt: punch.punchedAt,
-        rawValue: punch.rawValue,
-      }));
-
-      if (punchDocuments.length) {
-        await AttendancePunch.insertMany(punchDocuments, { ordered: false });
-      }
-
-      const groupedByDay = groupPunchesByDay(parsedEmployee.punches);
-      const dayDates = [...groupedByDay.keys()].map((value) => new Date(value));
-      const dayIndexes = [...new Set(dayDates.map((date) => date.getDay()))];
-      const schedules = await WorkSchedule.find({
-        employee: employeeDocument._id,
-        dayOfWeek: { $in: dayIndexes },
-      }).lean();
-
-      const scheduleByDay = new Map(
-        schedules.map((schedule) => [schedule.dayOfWeek, schedule]),
-      );
-
-      const dailyAttendanceDocuments = [];
-
-      groupedByDay.forEach((dayPunches, dateKey) => {
-        const date = new Date(dateKey);
-        const schedule = scheduleByDay.get(date.getDay()) || null;
-        const summary = calculateDailyAttendance({
-          date,
-          punches: dayPunches,
-          schedule,
-        });
-
-        dailyAttendanceDocuments.push({
-          upload: uploadDocument._id,
-          employee: employeeDocument._id,
-          date: summary.date,
-          checkIn: summary.checkIn,
-          lunchOut: summary.lunchOut,
-          lunchIn: summary.lunchIn,
-          checkOut: summary.checkOut,
-          workedMinutes: summary.workedMinutes,
-          lateMinutes: summary.lateMinutes,
-          earlyLeaveMinutes: summary.earlyLeaveMinutes,
-          overtimeMinutes: summary.overtimeMinutes,
-          status: summary.status,
-          notes: summary.notes,
-        });
-      });
-
-      if (dailyAttendanceDocuments.length) {
-        await DailyAttendance.insertMany(dailyAttendanceDocuments, {
-          ordered: false,
-        });
-      }
-
-      totalDailyAttendances += dailyAttendanceDocuments.length;
-
-      employeesPayload.push({
-        employeeId: employeeDocument._id.toString(),
-        biometricCode: employeeDocument.biometricCode,
-        name: employeeDocument.name,
-        department: employeeDocument.department,
-        punchCount: parsedEmployee.punches.length,
-        firstPunch: parsedEmployee.punches[0]?.punchedAt || null,
-        lastPunch:
-          parsedEmployee.punches[parsedEmployee.punches.length - 1]?.punchedAt || null,
-        calculatedDays: dailyAttendanceDocuments.length,
-      });
     }
 
-    uploadDocument.month = parsedFile.month || null;
-    uploadDocument.year = parsedFile.year || null;
-    uploadDocument.status = "processed";
-    uploadDocument.totalEmployees = parsedFile.employees.length;
-    uploadDocument.totalPunches = parsedFile.totalPunches;
-    await uploadDocument.save();
+    const originalFile = Buffer.from(await file.arrayBuffer());
+
+    if (!originalFile.length) {
+      return NextResponse.json(
+        { error: "El archivo está vacío o no se pudo leer." },
+        { status: 400 },
+      );
+    }
+
+    const uploadDocument = await AttendanceUpload.create({
+      fileName: file.name,
+      mimeType: file.type || "application/octet-stream",
+      fileSize: originalFile.length,
+      originalFile,
+      status: "uploaded",
+    });
 
     return NextResponse.json({
-      message: "Archivo procesado correctamente.",
+      message: "Archivo guardado correctamente.",
       upload: {
         id: uploadDocument._id.toString(),
         fileName: uploadDocument.fileName,
-        month: uploadDocument.month,
-        year: uploadDocument.year,
+        mimeType: uploadDocument.mimeType,
+        fileSize: uploadDocument.fileSize,
         status: uploadDocument.status,
+        normalizedAt: null,
+        hasNormalization: false,
+        createdAt: uploadDocument.createdAt,
       },
-      summary: {
-        totalEmployees: parsedFile.employees.length,
-        totalPunches: parsedFile.totalPunches,
-        totalDailyAttendances,
-      },
-      employees: employeesPayload,
-      parserLogs: parsedFile.logs,
     });
   } catch (error) {
-    console.error("attendance-upload-error", error);
-
-    if (uploadDocument) {
-      uploadDocument.status = "failed";
-      await uploadDocument.save();
-    }
+    console.error("attendance-upload-store-error", error);
 
     return NextResponse.json(
-      {
-        error:
-          error.message || "Ocurrió un error inesperado procesando la asistencia.",
-      },
+      { error: error.message || "No se pudo guardar el archivo de asistencia." },
       { status: 500 },
     );
   }

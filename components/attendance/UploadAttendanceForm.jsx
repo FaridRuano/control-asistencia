@@ -1,9 +1,48 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import Link from "next/link";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { format } from "date-fns";
+import { es } from "date-fns/locale";
+import {
+  AlertCircle,
+  Clock3,
+  CheckCircle2,
+  FileSpreadsheet,
+  Inbox,
+  History,
+  Upload,
+  X,
+} from "lucide-react";
+import styles from "./UploadAttendanceForm.module.scss";
 
-const ACCEPTED_EXTENSIONS = ".xls,.xlsx";
+const ACCEPTED_EXTENSIONS = [".xls", ".xlsx"];
+const ACCEPTED_FILES_LABEL = ACCEPTED_EXTENSIONS.join(", ");
+const STATUS_LABELS = {
+  uploaded: "Cargado",
+  processing: "Procesando",
+  processed: "Procesado",
+  failed: "Fallido",
+};
+
+function hasValidExcelExtension(fileName) {
+  const normalizedName = String(fileName || "").toLowerCase();
+  return ACCEPTED_EXTENSIONS.some((extension) => normalizedName.endsWith(extension));
+}
+
+function formatFileSize(bytes) {
+  if (!bytes) {
+    return "0 KB";
+  }
+
+  const sizeInKb = bytes / 1024;
+
+  if (sizeInKb < 1024) {
+    return `${sizeInKb.toFixed(1)} KB`;
+  }
+
+  return `${(sizeInKb / 1024).toFixed(2)} MB`;
+}
 
 function formatDateTime(value) {
   if (!value) {
@@ -16,29 +55,86 @@ function formatDateTime(value) {
     return "N/D";
   }
 
-  return format(parsed, "dd/MM/yyyy HH:mm");
+  return format(parsed, "dd/MM/yyyy HH:mm", { locale: es });
+}
+
+function formatUploadStatus(status) {
+  return STATUS_LABELS[status] || status || "N/D";
 }
 
 export default function UploadAttendanceForm() {
-  const [file, setFile] = useState(null);
-  const [response, setResponse] = useState(null);
-  const [error, setError] = useState("");
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [savedUpload, setSavedUpload] = useState(null);
+  const [uploadsHistory, setUploadsHistory] = useState([]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(true);
+  const [toast, setToast] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const inputRef = useRef(null);
+  const toastTimeoutRef = useRef(null);
+  const isUploadLocked = Boolean(savedUpload);
+
+  function showToast(type, message) {
+    setToast({ type, message });
+
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
+
+    toastTimeoutRef.current = setTimeout(() => {
+      setToast(null);
+      toastTimeoutRef.current = null;
+    }, 5000);
+  }
+
+  function applySelectedFile(file) {
+    if (isUploadLocked) {
+      return;
+    }
+
+    if (!file) {
+      return;
+    }
+
+    if (!hasValidExcelExtension(file.name)) {
+      showToast("error", "Solo se permiten archivos .xls o .xlsx.");
+      return;
+    }
+
+    setToast(null);
+    setSavedUpload(null);
+    setSelectedFile(file);
+  }
+
+  function handleInputChange(event) {
+    applySelectedFile(event.target.files?.[0] || null);
+  }
+
+  function handleDrop(event) {
+    event.preventDefault();
+    setIsDragging(false);
+
+    if (isUploadLocked) {
+      return;
+    }
+
+    applySelectedFile(event.dataTransfer.files?.[0] || null);
+  }
 
   function handleSubmit(event) {
     event.preventDefault();
 
-    if (!file) {
-      setError("Selecciona un archivo .xls o .xlsx para continuar.");
+    if (!selectedFile) {
+      showToast("error", "Selecciona un archivo .xls o .xlsx para continuar.");
       return;
     }
 
-    setError("");
+    setToast(null);
 
     startTransition(async () => {
       try {
         const formData = new FormData();
-        formData.append("file", file);
+        formData.append("file", selectedFile);
 
         const request = await fetch("/api/attendance/upload", {
           method: "POST",
@@ -48,138 +144,269 @@ export default function UploadAttendanceForm() {
         const payload = await request.json();
 
         if (!request.ok) {
-          throw new Error(payload.error || "No se pudo procesar el archivo.");
+          throw new Error(payload.error || "No se pudo guardar el archivo.");
         }
 
-        setResponse(payload);
+        setSavedUpload(payload.upload || null);
+        setUploadsHistory((current) => [payload.upload, ...current].slice(0, 20));
+        showToast("success", payload.message || "Archivo guardado correctamente.");
+        setSelectedFile(null);
+
+        if (inputRef.current) {
+          inputRef.current.value = "";
+        }
       } catch (submissionError) {
-        setResponse(null);
-        setError(submissionError.message);
+        setSavedUpload(null);
+        showToast("error", submissionError.message);
       }
     });
   }
 
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function fetchUploadsHistory() {
+      try {
+        if (!isCancelled) {
+          setIsHistoryLoading(true);
+        }
+
+        const response = await fetch("/api/attendance/upload");
+        const payload = await response.json();
+
+        if (!response.ok) {
+          throw new Error(payload.error || "No se pudo cargar el historial.");
+        }
+
+        if (!isCancelled) {
+          setUploadsHistory(payload.uploads || []);
+        }
+      } catch (historyError) {
+        if (!isCancelled) {
+          showToast("error", historyError.message);
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsHistoryLoading(false);
+        }
+      }
+    }
+
+    fetchUploadsHistory();
+
+    return () => {
+      isCancelled = true;
+
+      if (toastTimeoutRef.current) {
+        clearTimeout(toastTimeoutRef.current);
+      }
+    };
+  }, []);
+
   return (
-    <section className="rounded-[2rem] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[0_24px_80px_rgba(15,23,42,0.08)] backdrop-blur md:p-8">
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div>
-          <p className="text-sm font-medium uppercase tracking-[0.32em] text-[var(--primary)]">
-            Subir archivo
-          </p>
-          <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-900">
-            Procesa un reporte `InOutHorizontalReport`
-          </h2>
-          <p className="mt-3 text-sm leading-7 text-slate-600">
-            El parser inicial usa heurísticas para detectar bloques de empleados, fechas y horas en un Excel horizontal. Si el archivo real tiene variaciones, el backend devolverá trazas para afinarlo rápido.
-          </p>
-        </div>
-
-        <label className="block rounded-[1.5rem] border border-dashed border-slate-300 bg-white/70 p-6 transition hover:border-[var(--primary)] hover:bg-white">
-          <span className="block text-sm font-semibold text-slate-700">
-            Archivo Excel
-          </span>
-          <span className="mt-2 block text-sm text-slate-500">
-            Extensiones permitidas: {ACCEPTED_EXTENSIONS}
-          </span>
-          <input
-            type="file"
-            accept={ACCEPTED_EXTENSIONS}
-            onChange={(event) => setFile(event.target.files?.[0] || null)}
-            className="mt-4 block w-full cursor-pointer text-sm text-slate-600 file:mr-4 file:rounded-full file:border-0 file:bg-slate-900 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-slate-700"
-          />
-        </label>
-
-        <button
-          type="submit"
-          disabled={isPending}
-          className="inline-flex min-w-44 items-center justify-center rounded-full bg-[var(--primary)] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[var(--primary-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+    <>
+      {toast ? (
+        <div
+          className={`${styles.toast} ${
+            toast.type === "success" ? styles.toastSuccess : styles.toastError
+          }`}
+          role="status"
+          aria-live="polite"
         >
-          {isPending ? "Procesando archivo..." : "Subir y procesar"}
-        </button>
-
-        {error ? (
-          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-[var(--danger)]">
-            {error}
+          <div className={styles.toastIcon}>
+            {toast.type === "success" ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
           </div>
-        ) : null}
-      </form>
-
-      {response ? (
-        <div className="mt-8 space-y-6">
-          <div className="grid gap-4 md:grid-cols-4">
-            {[
-              { label: "Carga", value: response.upload?.fileName || "N/D" },
-              { label: "Empleados", value: response.summary?.totalEmployees || 0 },
-              { label: "Picadas", value: response.summary?.totalPunches || 0 },
-              { label: "Días calculados", value: response.summary?.totalDailyAttendances || 0 },
-            ].map((item) => (
-              <div
-                key={item.label}
-                className="rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm"
-              >
-                <p className="text-xs uppercase tracking-[0.24em] text-slate-400">
-                  {item.label}
-                </p>
-                <p className="mt-2 text-2xl font-semibold text-slate-900">
-                  {item.value}
-                </p>
-              </div>
-            ))}
+          <div className={styles.toastContent}>
+            <p className={styles.toastTitle}>
+              {toast.type === "success" ? "Archivo guardado" : "Algo necesita atención"}
+            </p>
+            <p className={styles.toastMessage}>{toast.message}</p>
           </div>
-
-          <div className="overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-200 text-sm">
-                <thead className="bg-slate-50 text-left text-slate-500">
-                  <tr>
-                    <th className="px-4 py-3 font-semibold">Código</th>
-                    <th className="px-4 py-3 font-semibold">Empleado</th>
-                    <th className="px-4 py-3 font-semibold">Departamento</th>
-                    <th className="px-4 py-3 font-semibold">Picadas</th>
-                    <th className="px-4 py-3 font-semibold">Primera</th>
-                    <th className="px-4 py-3 font-semibold">Última</th>
-                    <th className="px-4 py-3 font-semibold">Días</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {response.employees?.map((employee) => (
-                    <tr key={`${employee.biometricCode}-${employee.employeeId}`}>
-                      <td className="px-4 py-3 font-mono text-xs text-slate-600">
-                        {employee.biometricCode}
-                      </td>
-                      <td className="px-4 py-3 text-slate-900">{employee.name}</td>
-                      <td className="px-4 py-3 text-slate-600">
-                        {employee.department || "N/D"}
-                      </td>
-                      <td className="px-4 py-3 text-slate-600">{employee.punchCount}</td>
-                      <td className="px-4 py-3 text-slate-600">
-                        {formatDateTime(employee.firstPunch)}
-                      </td>
-                      <td className="px-4 py-3 text-slate-600">
-                        {formatDateTime(employee.lastPunch)}
-                      </td>
-                      <td className="px-4 py-3 text-slate-600">{employee.calculatedDays}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {response.parserLogs?.length ? (
-            <div className="rounded-[1.5rem] border border-amber-200 bg-amber-50 p-4">
-              <h3 className="text-sm font-semibold text-amber-900">
-                Trazas del parser para ajustar el formato real
-              </h3>
-              <ul className="mt-3 space-y-2 text-sm text-amber-800">
-                {response.parserLogs.slice(0, 12).map((log, index) => (
-                  <li key={`${log}-${index}`}>{log}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            className={styles.toastClose}
+            aria-label="Cerrar notificación"
+          >
+            <X size={16} />
+          </button>
         </div>
       ) : null}
-    </section>
+
+      <section className={styles.panel}>
+        <form onSubmit={handleSubmit} className={styles.form}>
+          <div className={styles.header}>
+            <p className={styles.eyebrow}>Subir archivo</p>
+            <h2 className={styles.title}>Guarda el reporte original del biométrico</h2>
+            <p className={styles.description}>
+              Arrastra el archivo `InOutHorizontalReport` a esta zona, confirma la carga y lo guardaremos completo en la base de datos para recuperarlo y procesarlo después.
+            </p>
+          </div>
+
+          <div
+            className={`${styles.dropzone} ${isDragging ? styles.dropzoneActive : ""} ${
+              isUploadLocked ? styles.dropzoneLocked : ""
+            }`}
+            onDragOver={(event) => {
+              if (isUploadLocked) {
+                return;
+              }
+
+              event.preventDefault();
+              setIsDragging(true);
+            }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={handleDrop}
+            onClick={() => {
+              if (!isUploadLocked) {
+                inputRef.current?.click();
+              }
+            }}
+            role="button"
+            tabIndex={isUploadLocked ? -1 : 0}
+            aria-disabled={isUploadLocked}
+            onKeyDown={(event) => {
+              if (isUploadLocked) {
+                return;
+              }
+
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                inputRef.current?.click();
+              }
+            }}
+          >
+            <div className={styles.dropzoneIcon}>
+              {selectedFile ? <FileSpreadsheet size={26} /> : <Inbox size={26} />}
+            </div>
+            <span className={styles.fieldTitle}>
+              {isUploadLocked
+                ? "Archivo guardado en la base de datos"
+                : selectedFile
+                  ? "Archivo listo para guardar"
+                  : "Arrastra tu archivo Excel aquí"}
+            </span>
+            <span className={styles.fieldHint}>
+              {isUploadLocked
+                ? "La carga quedó cerrada para evitar reemplazos accidentales desde esta misma vista."
+                : selectedFile
+                  ? "Revisa el archivo seleccionado y luego confirma el guardado."
+                  : `También puedes hacer clic para buscarlo. Permitidos: ${ACCEPTED_FILES_LABEL}`}
+            </span>
+
+            <input
+              ref={inputRef}
+              type="file"
+              accept={ACCEPTED_FILES_LABEL}
+              onChange={handleInputChange}
+              className={styles.fileInput}
+              disabled={isUploadLocked}
+            />
+          </div>
+
+          {selectedFile && !isUploadLocked ? (
+            <div className={styles.selectedFileCard}>
+              <div className={styles.selectedFileIcon}>
+                <FileSpreadsheet size={18} />
+              </div>
+              <div className={styles.selectedFileContent}>
+                <p className={styles.selectedFileName}>{selectedFile.name}</p>
+                <p className={styles.selectedFileMeta}>
+                  {formatFileSize(selectedFile.size)} · {selectedFile.type || "Tipo no disponible"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedFile(null);
+                  setToast(null);
+
+                  if (inputRef.current) {
+                    inputRef.current.value = "";
+                  }
+                }}
+                className={styles.removeFileButton}
+                aria-label="Quitar archivo"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          ) : null}
+
+          <div className={styles.actions}>
+            <button
+              type="submit"
+              disabled={!selectedFile || isPending || isUploadLocked}
+              className={styles.submit}
+            >
+              <Upload size={16} />
+              {isPending ? "Guardando archivo..." : "Confirmar guardado"}
+            </button>
+          </div>
+        </form>
+
+        {savedUpload ? (
+          <div className={styles.stack}>
+            <div className={styles.summaryGrid}>
+              {[
+                { label: "Archivo", value: savedUpload.fileName || "N/D" },
+                { label: "Estado", value: formatUploadStatus(savedUpload.status) },
+                { label: "Tamaño", value: formatFileSize(savedUpload.fileSize || 0) },
+                { label: "Guardado", value: formatDateTime(savedUpload.createdAt) },
+              ].map((item) => (
+                <div key={item.label} className={styles.summaryCard}>
+                  <p className={styles.summaryLabel}>{item.label}</p>
+                  <p className={styles.summaryValueSmall}>{item.value}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        <div className={styles.historySection}>
+          <div className={styles.historyHeader}>
+            <div>
+              <p className={styles.eyebrow}>Historial</p>
+              <h3 className={styles.historyTitle}>Archivos cargados recientemente</h3>
+            </div>
+            <div className={styles.historyBadge}>
+              <History size={16} />
+              <span>{uploadsHistory.length}</span>
+            </div>
+          </div>
+
+          {isHistoryLoading ? (
+            <div className={styles.historyEmpty}>
+              <Clock3 size={16} />
+              <span>Cargando historial de archivos...</span>
+            </div>
+          ) : uploadsHistory.length ? (
+            <div className={styles.historyList}>
+              {uploadsHistory.map((upload) => (
+                <article key={upload.id} className={styles.historyItem}>
+                  <div className={styles.historyItemMain}>
+                    <p className={styles.historyFileName}>{upload.fileName}</p>
+                    <p className={styles.historyMeta}>
+                      {formatFileSize(upload.fileSize || 0)} · {formatDateTime(upload.createdAt)}
+                    </p>
+                  </div>
+                  <div className={styles.historyItemSide}>
+                    <span className={styles.historyStatus}>{formatUploadStatus(upload.status)}</span>
+                    <Link href={`/dashboard/uploads/${upload.id}`} className={styles.historyAction}>
+                      {upload.hasNormalization ? "Abrir revisión" : "Abrir y revisar"}
+                    </Link>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className={styles.historyEmpty}>
+              <FileSpreadsheet size={16} />
+              <span>Todavía no hay archivos cargados en el historial.</span>
+            </div>
+          )}
+        </div>
+      </section>
+    </>
   );
 }

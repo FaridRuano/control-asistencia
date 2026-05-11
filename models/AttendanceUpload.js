@@ -1,11 +1,41 @@
 import mongoose, { Schema } from "mongoose";
 
+const normalizedEmployeeSchema = new Schema(
+  {
+    biometricCode: { type: String, default: "" },
+    fullName: { type: String, default: "" },
+    department: { type: String, default: "" },
+    punchCount: { type: Number, default: 0 },
+    punches: [
+      {
+        punchedAt: { type: Date, required: true },
+        rawValue: { type: String, default: "" },
+      },
+    ],
+  },
+  { _id: false },
+);
+
 const attendanceUploadSchema = new Schema(
   {
     fileName: {
       type: String,
       required: true,
       trim: true,
+    },
+    mimeType: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    fileSize: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    originalFile: {
+      type: Buffer,
+      required: true,
     },
     month: {
       type: Number,
@@ -20,14 +50,46 @@ const attendanceUploadSchema = new Schema(
     },
     status: {
       type: String,
-      enum: ["processing", "processed", "failed"],
-      default: "processing",
+      enum: ["uploaded", "processing", "processed", "failed"],
+      default: "uploaded",
     },
     totalEmployees: {
       type: Number,
       default: 0,
     },
     totalPunches: {
+      type: Number,
+      default: 0,
+    },
+    normalizedSnapshot: {
+      summary: {
+        totalEmployees: { type: Number, default: 0 },
+        totalPunches: { type: Number, default: 0 },
+        month: { type: Number, default: null },
+        year: { type: Number, default: null },
+      },
+      employees: {
+        type: [normalizedEmployeeSchema],
+        default: [],
+      },
+      parserLogs: {
+        type: [String],
+        default: [],
+      },
+    },
+    normalizedAt: {
+      type: Date,
+      default: null,
+    },
+    punchesPublishedAt: {
+      type: Date,
+      default: null,
+    },
+    publishedEmployees: {
+      type: Number,
+      default: 0,
+    },
+    publishedPunches: {
       type: Number,
       default: 0,
     },
