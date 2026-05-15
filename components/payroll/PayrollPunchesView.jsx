@@ -3,10 +3,15 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { format, parseISO } from "date-fns";
-import { es } from "date-fns/locale";
-import { CalendarDays, ChevronDown, Save, Search, UserRound } from "lucide-react";
+import { AlertCircle, CalendarDays, CheckCircle2, ChevronDown, Save, Search, UserRound, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
+import {
+  formatEcuadorDateKey,
+  formatEcuadorDateTime,
+  getEcuadorParts,
+} from "@/lib/datetime/ecuador";
+import { planningModulePath } from "@/lib/modules/planning/routes";
 import styles from "./PayrollPunchesView.module.scss";
 
 const FILTER_OPTIONS = [
@@ -30,31 +35,11 @@ const INCOMPLETE_DAY_OPTIONS = [
 const FILTER_MODE_VALUES = new Set(FILTER_OPTIONS.map((option) => option.value));
 
 function formatDateTime(value) {
-  if (!value) {
-    return "N/D";
-  }
-
-  const parsed = new Date(value);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return "N/D";
-  }
-
-  return format(parsed, "dd/MM/yyyy HH:mm", { locale: es });
+  return formatEcuadorDateTime(value);
 }
 
 function formatDate(value) {
-  if (!value) {
-    return "";
-  }
-
-  const parsed = new Date(value);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return "";
-  }
-
-  return format(parsed, "yyyy-MM-dd");
+  return formatEcuadorDateKey(value);
 }
 
 function formatMonth(value) {
@@ -63,12 +48,13 @@ function formatMonth(value) {
   }
 
   const parsed = new Date(value);
+  const parts = getEcuadorParts(parsed);
 
-  if (Number.isNaN(parsed.getTime())) {
+  if (!parts) {
     return "";
   }
 
-  return format(parsed, "yyyy-MM");
+  return `${parts.year}-${String(parts.month).padStart(2, "0")}`;
 }
 
 function formatWeek(value) {
@@ -77,12 +63,14 @@ function formatWeek(value) {
   }
 
   const parsed = new Date(value);
+  const parts = getEcuadorParts(parsed);
 
-  if (Number.isNaN(parsed.getTime())) {
+  if (!parts) {
     return "";
   }
 
-  return format(parsed, "RRRR-'W'II");
+  const shifted = new Date(Date.UTC(parts.year, parts.monthIndex, parts.day));
+  return format(shifted, "RRRR-'W'II");
 }
 
 function capitalizeLabel(value) {
@@ -104,7 +92,12 @@ function formatCompactDateLabel(value) {
     return "--";
   }
 
-  return format(parsed, "d EEEE, MMMM", { locale: es });
+  return new Intl.DateTimeFormat("es-EC", {
+    timeZone: "America/Guayaquil",
+    day: "numeric",
+    weekday: "long",
+    month: "long",
+  }).format(parsed);
 }
 
 function formatHourForSchedule(value) {
@@ -161,6 +154,41 @@ function buildScheduleLine(schedule) {
   return `${formatHourForSchedule(schedule.startTime)} - ${lunchLabel} - ${formatHourForSchedule(schedule.endTime)}`;
 }
 
+function parseTimeLabelToMinutes(value) {
+  if (!value || value === "--") {
+    return null;
+  }
+
+  const [hours, minutes] = String(value).split(":").map(Number);
+
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes)) {
+    return null;
+  }
+
+  return hours * 60 + minutes;
+}
+
+function buildActualAttendanceSummary(day) {
+  const checkIn = day.matched?.checkIn && day.matched.checkIn !== "--" ? day.matched.checkIn : "--";
+  const checkOut = day.matched?.checkOut && day.matched.checkOut !== "--" ? day.matched.checkOut : "--";
+  const lunchOutMinutes = parseTimeLabelToMinutes(day.matched?.lunchOut);
+  const lunchInMinutes = parseTimeLabelToMinutes(day.matched?.lunchIn);
+
+  let lunchLabel = "--";
+
+  if (day.schedule?.hasLunch === false) {
+    lunchLabel = "Sin almuerzo";
+  } else if (lunchOutMinutes !== null && lunchInMinutes !== null && lunchInMinutes >= lunchOutMinutes) {
+    lunchLabel = formatLunchDuration(lunchInMinutes - lunchOutMinutes);
+  }
+
+  return {
+    checkIn,
+    lunchLabel,
+    checkOut,
+  };
+}
+
 function formatWorkedHoursLabel(workedMinutes) {
   if (!Number.isFinite(workedMinutes) || workedMinutes < 0) {
     return "--";
@@ -171,9 +199,9 @@ function formatWorkedHoursLabel(workedMinutes) {
 }
 
 function resolveDisplayedWorkedMinutes(day, incompleteDayDecision) {
-  if (day.hasSinglePunchCandidate) {
+  if (day.needsManualDayReview) {
     if (incompleteDayDecision === "valid_day") {
-      return day.scheduledWorkedMinutes || 0;
+      return Math.min(day.scheduledWorkedMinutes || 0, 8 * 60);
     }
 
     if (incompleteDayDecision === "absence") {
@@ -183,7 +211,22 @@ function resolveDisplayedWorkedMinutes(day, incompleteDayDecision) {
     return null;
   }
 
-  return day.workedMinutes;
+  if (day.schedule?.dayType === "weekend_overtime") {
+    return 0;
+  }
+
+  return Number.isFinite(day.baseWorkedMinutes) ? day.baseWorkedMinutes : day.workedMinutes;
+}
+
+function formatExtraWorkedLabel(minutes) {
+  if (!Number.isFinite(minutes) || minutes <= 0) {
+    return "";
+  }
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+
+  return `+${hours}h ${String(remainingMinutes).padStart(2, "0")}m`;
 }
 
 function formatLateArrival(minutes) {
@@ -275,6 +318,15 @@ export default function PayrollPunchesView() {
   const [isSavingSupplementary, startSavingSupplementary] = useTransition();
   const autocompleteRef = useRef(null);
   const hasAutoFetchedRef = useRef(false);
+  const feedbackTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (feedbackTimeoutRef.current) {
+        clearTimeout(feedbackTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     let isCancelled = false;
@@ -335,7 +387,13 @@ export default function PayrollPunchesView() {
     }
 
     return employees
-      .filter((employee) => employee.fullName.toLowerCase().includes(normalizedQuery))
+      .filter((employee) =>
+        [employee.fullName, employee.organizationLabel, employee.roleName, employee.areaName]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(normalizedQuery),
+      )
       .slice(0, 8);
   }, [employees, employeeQuery]);
 
@@ -356,7 +414,7 @@ export default function PayrollPunchesView() {
     [visibleComparisons],
   );
   const incompleteDayCandidateComparisons = useMemo(
-    () => visibleComparisons.filter((day) => day.hasSinglePunchCandidate),
+    () => visibleComparisons.filter((day) => day.needsManualDayReview),
     [visibleComparisons],
   );
   const hasSupplementaryChanges = useMemo(
@@ -417,7 +475,7 @@ export default function PayrollPunchesView() {
     params.set("employeeName", selectedEmployee?.fullName || employeeQuery || result?.employee?.fullName || "");
     params.set("month", mode === "month" ? monthValue : formatMonth(result?.range?.start || new Date()));
 
-    return `/dashboard/payroll/estimate?${params.toString()}`;
+    return `${planningModulePath("/payroll/estimate")}?${params.toString()}`;
   }, [employeeId, employeeQuery, mode, monthValue, result?.employee?.fullName, result?.range?.start, selectedEmployee?.fullName]);
 
   function syncFiltersToUrl(nextFilters) {
@@ -453,6 +511,15 @@ export default function PayrollPunchesView() {
 
   function showFeedback(type, message) {
     setFeedback({ type, message });
+
+    if (feedbackTimeoutRef.current) {
+      clearTimeout(feedbackTimeoutRef.current);
+    }
+
+    feedbackTimeoutRef.current = setTimeout(() => {
+      setFeedback(null);
+      feedbackTimeoutRef.current = null;
+    }, 5000);
   }
 
   useEffect(() => {
@@ -792,7 +859,11 @@ export default function PayrollPunchesView() {
         <div className={styles.actions}>
           <div className={styles.selectionHint}>
             <UserRound size={15} />
-            <span>{selectedEmployee ? selectedEmployee.fullName : "Selecciona un empleado para consultar"}</span>
+            <span>
+              {selectedEmployee
+                ? "Empleado seleccionado"
+                : "Selecciona un empleado para consultar"}
+            </span>
           </div>
 
           <button type="submit" disabled={isPending || !employeeId} className={styles.submit}>
@@ -805,7 +876,35 @@ export default function PayrollPunchesView() {
       </form>
 
       {feedback ? (
-        <div className={feedback.type === "success" ? styles.success : styles.error}>{feedback.message}</div>
+        <div
+          className={`${styles.toast} ${
+            feedback.type === "success" ? styles.toastSuccess : styles.toastError
+          }`}
+          role="status"
+          aria-live="polite"
+        >
+          <div className={styles.toastIcon}>
+            {feedback.type === "success" ? (
+              <CheckCircle2 size={18} />
+            ) : (
+              <AlertCircle size={18} />
+            )}
+          </div>
+          <div className={styles.toastContent}>
+            <p className={styles.toastTitle}>
+              {feedback.type === "success" ? "Operación exitosa" : "Algo necesita atención"}
+            </p>
+            <p className={styles.toastMessage}>{feedback.message}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setFeedback(null)}
+            className={styles.toastClose}
+            aria-label="Cerrar notificación"
+          >
+            <X size={16} />
+          </button>
+        </div>
       ) : null}
 
       {result ? (
@@ -813,7 +912,6 @@ export default function PayrollPunchesView() {
           <div className={styles.summary}>
             <div className={styles.summaryTop}>
               <div>
-                <p className={styles.employeeName}>{result.employee?.fullName}</p>
                 <p className={styles.summaryText}>
                   {result.summary?.totalPunches || 0} picadas registradas entre{" "}
                   {formatDateTime(result.range?.start)} y {formatDateTime(result.range?.end)}
@@ -880,8 +978,9 @@ export default function PayrollPunchesView() {
                         incompleteDayDecisions[day.dateKey] ??
                         day.savedIncompleteDayDecision ??
                         "";
+                      const actualSummary = buildActualAttendanceSummary(day);
                       const isResolvedSinglePunch =
-                        day.hasSinglePunchCandidate && Boolean(currentIncompleteDayDecision);
+                        day.needsManualDayReview && Boolean(currentIncompleteDayDecision);
                       const rowClassName =
                         day.hasMissingPunches && !isResolvedSinglePunch
                           ? styles.issueRow
@@ -904,6 +1003,18 @@ export default function PayrollPunchesView() {
                                 />
                                 <span className={styles.scheduleText}>
                                   {buildScheduleLine(day.schedule)}
+                                </span>
+                              </div>
+
+                              <div className={styles.actualSummary}>
+                                <span className={styles.actualSummaryItem}>
+                                  <strong>Entrada:</strong> {actualSummary.checkIn}
+                                </span>
+                                <span className={styles.actualSummaryItem}>
+                                  <strong>Almuerzo:</strong> {actualSummary.lunchLabel}
+                                </span>
+                                <span className={styles.actualSummaryItem}>
+                                  <strong>Salida:</strong> {actualSummary.checkOut}
                                 </span>
                               </div>
 
@@ -958,7 +1069,7 @@ export default function PayrollPunchesView() {
                             )}
                           </td>
                           <td>
-                            {day.hasSinglePunchCandidate ? (
+                            {day.needsManualDayReview ? (
                               <div className={styles.reviewField}>
                                 <select
                                   value={currentIncompleteDayDecision}
@@ -977,13 +1088,22 @@ export default function PayrollPunchesView() {
                                   ))}
                                 </select>
                                 <span className={styles.overtimeHint}>
-                                  Solo hay una picada. Define si cuenta el día normal o como falta.
+                                  {day.missingPunchesReason ||
+                                    "No cuenta con los registros necesarios. Define si cuenta el día normal o como falta."}
                                 </span>
                               </div>
-                            ) : day.hasOvertimeCandidate ? (
-                              <div className={styles.overtimeField}>
-                                <select
-                                  value={overtimeDecisions[day.dateKey] ?? day.savedSupplementaryDecision ?? ""}
+                          ) : day.schedule?.dayType === "weekend_overtime" &&
+                            Number(day.extraWorkedMinutes || 0) > 0 ? (
+                            <div className={styles.overtimeField}>
+                              <span className={styles.staticReviewTag}>Extraordinaria</span>
+                              <span className={styles.overtimeHint}>
+                                {formatExtraWorkedLabel(day.extraWorkedMinutes)} fuera de base
+                              </span>
+                            </div>
+                          ) : day.hasOvertimeCandidate ? (
+                            <div className={styles.overtimeField}>
+                              <select
+                                value={overtimeDecisions[day.dateKey] ?? day.savedSupplementaryDecision ?? ""}
                                   onChange={(event) =>
                                     setOvertimeDecisions((current) => ({
                                       ...current,
@@ -997,12 +1117,14 @@ export default function PayrollPunchesView() {
                                       {option.label}
                                     </option>
                                   ))}
-                                </select>
-                                <span className={styles.overtimeHint}>
-                                  Salida {day.matched?.checkOut || "--"} · {day.overtimeCandidateHours}h potencial
-                                </span>
-                              </div>
-                            ) : (
+                              </select>
+                              <span className={styles.overtimeHint}>
+                                {formatExtraWorkedLabel(day.extraWorkedMinutes || day.overtimeCandidateMinutes)} fuera de base
+                                {" · "}
+                                {day.overtimeCandidateHours}h potencial
+                              </span>
+                            </div>
+                          ) : (
                               <span className={styles.emptyInline}>--</span>
                             )}
                           </td>

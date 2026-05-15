@@ -1,8 +1,26 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
-import { CheckCircle2, Edit3, Landmark, PencilLine, Plus, Trash2, UserRound, X } from "lucide-react";
+import {
+  BriefcaseBusiness,
+  CheckCircle2,
+  Edit3,
+  Landmark,
+  PencilLine,
+  Plus,
+  ReceiptText,
+  Search,
+  ShieldCheck,
+  TimerReset,
+  Trash2,
+  UserRound,
+  X,
+} from "lucide-react";
+
+import { planningModulePath } from "@/lib/modules/planning/routes";
+import { BRANCH_OPTIONS, getRoleConfig, getRolesForArea, ORGANIZATION_AREAS } from "@/lib/organization";
 import styles from "./EmployeeManagement.module.scss";
 
 const INITIAL_FORM = {
@@ -10,10 +28,9 @@ const INITIAL_FORM = {
   fullName: "",
   salary: "",
   branch: "AMBATO",
-  department: "",
+  areaCode: "",
+  roleCode: "",
 };
-
-const BRANCH_OPTIONS = ["AMBATO", "SALCEDO"];
 
 function mapEmployeeToForm(employee) {
   return {
@@ -21,13 +38,15 @@ function mapEmployeeToForm(employee) {
     fullName: employee.fullName || "",
     salary: String(employee.salary ?? ""),
     branch: employee.branch || "AMBATO",
-    department: employee.department || "",
+    areaCode: employee.areaCode || "",
+    roleCode: employee.roleCode || "",
   };
 }
 
 export default function EmployeeManagement() {
   const [employees, setEmployees] = useState([]);
   const [form, setForm] = useState(INITIAL_FORM);
+  const [search, setSearch] = useState("");
   const [editingEmployeeId, setEditingEmployeeId] = useState("");
   const [employeeToDelete, setEmployeeToDelete] = useState(null);
   const [error, setError] = useState("");
@@ -60,6 +79,29 @@ export default function EmployeeManagement() {
       ),
     [employees],
   );
+  const filteredEmployees = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase();
+
+    if (!normalizedSearch) {
+      return sortedEmployees;
+    }
+
+    return sortedEmployees.filter((employee) => {
+      const haystack = [
+        employee.fullName,
+        employee.branch,
+        employee.biometricCode,
+        employee.areaName,
+        employee.roleName,
+        employee.department,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(normalizedSearch);
+    });
+  }, [search, sortedEmployees]);
 
   useEffect(() => {
     return () => {
@@ -69,11 +111,27 @@ export default function EmployeeManagement() {
     };
   }, []);
 
+  const roleOptions = useMemo(() => getRolesForArea(form.areaCode), [form.areaCode]);
+  const selectedRoleConfig = useMemo(
+    () => getRoleConfig(form.areaCode, form.roleCode),
+    [form.areaCode, form.roleCode],
+  );
+
   function updateField(name, value) {
-    setForm((current) => ({
-      ...current,
-      [name]: value,
-    }));
+    setForm((current) => {
+      if (name === "areaCode") {
+        return {
+          ...current,
+          areaCode: value,
+          roleCode: "",
+        };
+      }
+
+      return {
+        ...current,
+        [name]: value,
+      };
+    });
   }
 
   function resetForm() {
@@ -302,6 +360,41 @@ export default function EmployeeManagement() {
           </label>
 
           <label className={styles.field}>
+            <span className={styles.label}>Área</span>
+            <select
+              value={form.areaCode}
+              onChange={(event) => updateField("areaCode", event.target.value)}
+              className={styles.select}
+              required
+            >
+              <option value="">Selecciona un área</option>
+              {ORGANIZATION_AREAS.map((area) => (
+                <option key={area.code} value={area.code}>
+                  {area.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className={styles.field}>
+            <span className={styles.label}>Rol</span>
+            <select
+              value={form.roleCode}
+              onChange={(event) => updateField("roleCode", event.target.value)}
+              className={styles.select}
+              required
+              disabled={!form.areaCode}
+            >
+              <option value="">Selecciona un rol</option>
+              {roleOptions.map((role) => (
+                <option key={role.code} value={role.code}>
+                  {role.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className={styles.field}>
             <span className={styles.label}>Código biométrico opcional</span>
             <input
               value={form.biometricCode}
@@ -310,14 +403,27 @@ export default function EmployeeManagement() {
             />
           </label>
 
-          <label className={styles.field}>
-            <span className={styles.label}>Departamento opcional</span>
-            <input
-              value={form.department}
-              onChange={(event) => updateField("department", event.target.value)}
-              className={styles.input}
-            />
-          </label>
+          {selectedRoleConfig ? (
+            <div className={styles.ruleCard}>
+              <p className={styles.ruleTitle}>Regla base inicial del rol</p>
+              <div className={styles.ruleGrid}>
+                <span className={styles.ruleChip}>
+                  <BriefcaseBusiness size={14} />
+                  {selectedRoleConfig.scheduleProfile}
+                </span>
+                <span className={styles.ruleChip}>
+                  <TimerReset size={14} />
+                  Almuerzo {selectedRoleConfig.lunchMinutes} min
+                </span>
+                {selectedRoleConfig.weeklyRotation ? (
+                  <span className={styles.ruleChip}>
+                    <ShieldCheck size={14} />
+                    {selectedRoleConfig.weeklyRotation}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
 
           <div className={styles.actions}>
             <button
@@ -352,12 +458,23 @@ export default function EmployeeManagement() {
       <section>
         <div className={styles.toolbar}>
           <p className={styles.count}>
-            {sortedEmployees.length} empleado{sortedEmployees.length === 1 ? "" : "s"} registrado
-            {sortedEmployees.length === 1 ? "" : "s"}.
+            {filteredEmployees.length} empleado{filteredEmployees.length === 1 ? "" : "s"} visible
+            {filteredEmployees.length === 1 ? "" : "s"}
+            {search.trim() ? ` de ${sortedEmployees.length}` : ""}.
           </p>
+          <label className={styles.searchField}>
+            <Search size={16} />
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Buscar empleado"
+              className={styles.searchInput}
+            />
+          </label>
         </div>
 
-        {sortedEmployees.length ? (
+        {filteredEmployees.length ? (
           <div className={styles.tableWrap}>
             <div className={styles.scroll}>
               <table className={styles.table}>
@@ -365,20 +482,20 @@ export default function EmployeeManagement() {
                   <tr>
                     <th>Nombre completo</th>
                     <th>Sueldo</th>
-                    <th>Sucursal</th>
+                    <th>Estructura</th>
                     <th>Identificación</th>
                     <th>Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedEmployees.map((employee) => (
+                  {filteredEmployees.map((employee) => (
                     <tr key={employee.id}>
                       <td>
                         <div className={styles.name}>{employee.fullName}</div>
                         <div className={styles.metaLine}>
                           <span className={styles.metaItem}>
                             <UserRound size={14} />
-                            {employee.department || "Sin departamento"}
+                            {employee.organizationLabel}
                           </span>
                         </div>
                       </td>
@@ -388,10 +505,16 @@ export default function EmployeeManagement() {
                         </div>
                       </td>
                       <td>
-                        <span className={styles.branchBadge}>
-                          <Landmark size={14} />
-                          {employee.branch}
-                        </span>
+                        <div className={styles.structureStack}>
+                          <span className={styles.branchBadge}>
+                            <Landmark size={14} />
+                            {employee.branch}
+                          </span>
+                          <span className={styles.roleBadge}>
+                            <BriefcaseBusiness size={14} />
+                            {employee.roleName || "Rol pendiente"}
+                          </span>
+                        </div>
                       </td>
                       <td>
                         <div className={styles.identityBlock}>
@@ -401,8 +524,16 @@ export default function EmployeeManagement() {
                           </span>
                         </div>
                       </td>
-                      <td>
-                        <div className={styles.rowActions}>
+                        <td>
+                          <div className={styles.rowActions}>
+                          <Link
+                            href={`${planningModulePath("/payroll")}?employeeId=${employee.id}&employeeName=${encodeURIComponent(employee.fullName)}&mode=month`}
+                            className={styles.miniLink}
+                            aria-label={`Ver nómina de ${employee.fullName}`}
+                            title="Ir a nómina"
+                          >
+                            <ReceiptText size={16} />
+                          </Link>
                           <button
                             type="button"
                             onClick={() => handleEdit(employee)}
@@ -431,7 +562,9 @@ export default function EmployeeManagement() {
           </div>
         ) : (
           <div className={styles.empty}>
-            Todavía no hay empleados registrados. Usa el formulario para crear el primero.
+            {sortedEmployees.length
+              ? "No encontramos empleados con ese criterio de búsqueda."
+              : "Todavía no hay empleados registrados. Usa el formulario para crear el primero."}
           </div>
         )}
       </section>

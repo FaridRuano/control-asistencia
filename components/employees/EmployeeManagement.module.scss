@@ -204,6 +204,39 @@
   flex-wrap: wrap;
 }
 
+.ruleCard {
+  border: 1px solid rgba(31, 111, 255, 0.14);
+  border-radius: 1.1rem;
+  background: linear-gradient(135deg, #f7fbff, #edf4ff);
+  padding: 0.95rem 1rem;
+}
+
+.ruleTitle {
+  margin: 0;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #17428c;
+}
+
+.ruleGrid {
+  margin-top: 0.7rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.ruleChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #305388;
+  padding: 0.42rem 0.7rem;
+  font-size: 0.79rem;
+  font-weight: 600;
+}
+
 .buttonPrimary,
 .buttonGhost,
 .buttonDanger {
@@ -296,8 +329,37 @@
 
 .count {
   margin: 0;
-  color: rgba(248, 251, 255, 0.82);
+  color: #4f6489;
   font-size: 0.95rem;
+}
+
+.searchField {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: min(320px, 100%);
+  border: 1px solid rgba(16, 33, 62, 0.12);
+  border-radius: 999px;
+  background: white;
+  color: #6a7ea2;
+  padding: 0.75rem 0.95rem;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+
+  &:focus-within {
+    border-color: rgba(31, 111, 255, 0.3);
+    box-shadow: 0 0 0 4px rgba(31, 111, 255, 0.12);
+  }
+}
+
+.searchInput {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  outline: none;
+  padding: 0;
 }
 
 .tableWrap {
@@ -387,6 +449,23 @@
   font-weight: 700;
 }
 
+.structureStack {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.roleBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border-radius: 999px;
+  background: #f5f7fb;
+  color: #3b526f;
+  padding: 0.42rem 0.7rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
 .identityBlock {
   display: grid;
   gap: 0.3rem;
@@ -410,6 +489,7 @@
   gap: 0.55rem;
 }
 
+.miniLink,
 .miniButton,
 .miniDanger {
   display: inline-flex;
@@ -427,6 +507,17 @@
 
   &:hover {
     transform: translateY(-1px);
+  }
+}
+
+.miniLink {
+  border: 1px solid rgba(31, 111, 255, 0.16);
+  background: #eef5ff;
+  color: #1b4ba0;
+
+  &:hover {
+    background: #e3efff;
+    border-color: rgba(31, 111, 255, 0.24);
   }
 }
 
@@ -454,5 +545,5 @@
 .empty {
   padding: 2rem;
   text-align: center;
-  color: rgba(248, 251, 255, 0.78);
+  color: #5e7397;
 }

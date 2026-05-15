@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
+import { planningModulePath } from "@/lib/modules/planning/routes";
 
 export default function DashboardPage() {
-  redirect("/dashboard/employees");
+  redirect(planningModulePath("/home"));
 }

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { format, startOfDay, startOfWeek } from "date-fns";
+import { format, startOfWeek } from "date-fns";
 import { es } from "date-fns/locale";
 import {
   AlertCircle,
@@ -16,39 +16,25 @@ import {
 } from "lucide-react";
 
 import styles from "./NormalizeAttendanceView.module.scss";
+import {
+  formatEcuadorDate,
+  formatEcuadorDateTime,
+  formatEcuadorDateKey,
+  formatEcuadorTime,
+  getEcuadorParts,
+} from "@/lib/datetime/ecuador";
+import { planningModulePath } from "@/lib/modules/planning/routes";
 
 function formatDateTime(value) {
-  if (!value) {
-    return "N/D";
-  }
-
-  const parsed = new Date(value);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return "N/D";
-  }
-
-  return format(parsed, "dd/MM/yyyy HH:mm", { locale: es });
+  return formatEcuadorDateTime(value);
 }
 
 function formatDate(value) {
-  const parsed = new Date(value);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return "N/D";
-  }
-
-  return format(parsed, "dd/MM/yyyy", { locale: es });
+  return formatEcuadorDate(value);
 }
 
 function formatTime(value) {
-  const parsed = new Date(value);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return "N/D";
-  }
-
-  return format(parsed, "HH:mm", { locale: es });
+  return formatEcuadorTime(value);
 }
 
 function formatDayName(value) {
@@ -58,7 +44,10 @@ function formatDayName(value) {
     return "N/D";
   }
 
-  return format(parsed, "EEEE", { locale: es });
+  return new Intl.DateTimeFormat("es-EC", {
+    timeZone: "America/Guayaquil",
+    weekday: "long",
+  }).format(parsed);
 }
 
 function formatWeekLabel(value) {
@@ -87,7 +76,14 @@ function groupPunchesByWeek(punches) {
       return;
     }
 
-    const weekStart = startOfWeek(parsed, { weekStartsOn: 1 });
+    const parts = getEcuadorParts(parsed);
+
+    if (!parts) {
+      return;
+    }
+
+    const shifted = new Date(Date.UTC(parts.year, parts.monthIndex, parts.day));
+    const weekStart = startOfWeek(shifted, { weekStartsOn: 1 });
     const weekKey = weekStart.toISOString();
 
     if (!grouped.has(weekKey)) {
@@ -118,7 +114,7 @@ function groupPunchesByDay(punches) {
       return;
     }
 
-    const dayKey = startOfDay(parsed).toISOString();
+    const dayKey = formatEcuadorDateKey(parsed);
 
     if (!grouped.has(dayKey)) {
       grouped.set(dayKey, []);
@@ -128,7 +124,7 @@ function groupPunchesByDay(punches) {
   });
 
   return [...grouped.entries()]
-    .sort((left, right) => new Date(left[0]).getTime() - new Date(right[0]).getTime())
+    .sort((left, right) => String(left[0]).localeCompare(String(right[0])))
     .map(([dayKey, dayPunches]) => ({
       dayKey,
       punches: dayPunches.sort(
@@ -339,7 +335,7 @@ export default function NormalizeAttendanceView({ uploadId }) {
 
       <section className={styles.panel}>
         <div className={styles.topBar}>
-          <Link href="/dashboard/uploads" className={styles.backLink}>
+          <Link href={planningModulePath("/uploads")} className={styles.backLink}>
             <ArrowLeft size={16} />
             Volver a cargas
           </Link>

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
+import { planningModulePath } from "@/lib/modules/planning/routes";
 
 export default function LegacyUploadsPage() {
-  redirect("/dashboard/uploads");
+  redirect(planningModulePath("/uploads"));
 }

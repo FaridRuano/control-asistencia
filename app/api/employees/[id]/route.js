@@ -1,37 +1,9 @@
 import { NextResponse } from "next/server";
 
 import { isAuthenticated } from "@/lib/auth";
-import { BRANCH_OPTIONS } from "@/lib/branches";
 import connectToDatabase from "@/lib/db/mongodb";
+import { normalizeEmployeePayload, serializeEmployee } from "@/lib/employees";
 import Employee from "@/models/Employee";
-
-function normalizeEmployeePayload(body) {
-  const fullName = String(body?.fullName || "").trim();
-  const biometricCode = String(body?.biometricCode || "").trim();
-  const department = String(body?.department || "").trim();
-  const salary = Number(body?.salary);
-  const branch = String(body?.branch || "").trim().toUpperCase();
-
-  if (!fullName) {
-    throw new Error("El nombre completo es obligatorio.");
-  }
-
-  if (!Number.isFinite(salary) || salary < 0) {
-    throw new Error("El sueldo debe ser un número válido mayor o igual a 0.");
-  }
-
-  if (!BRANCH_OPTIONS.includes(branch)) {
-    throw new Error("La sucursal debe ser AMBATO o SALCEDO.");
-  }
-
-  return {
-    biometricCode,
-    fullName,
-    salary,
-    branch,
-    department,
-  };
-}
 
 export async function PATCH(request, context) {
   const authenticated = await isAuthenticated();
@@ -56,15 +28,7 @@ export async function PATCH(request, context) {
     }
 
     return NextResponse.json({
-      employee: {
-        id: employee._id.toString(),
-        biometricCode: employee.biometricCode || "",
-        fullName: employee.fullName,
-        salary: employee.salary || 0,
-        branch: employee.branch,
-        department: employee.department || "",
-        isActive: employee.isActive,
-      },
+      employee: serializeEmployee(employee),
     });
   } catch (error) {
     if (error?.code === 11000) {

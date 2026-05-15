@@ -503,7 +503,7 @@
 
 .table {
   width: 100%;
-  min-width: 940px;
+  min-width: 1080px;
   table-layout: fixed;
   border-collapse: collapse;
   color: var(--text);
@@ -544,6 +544,10 @@
 
 .colTotal {
   width: 8.5rem;
+}
+
+.colExtra {
+  width: 10.5rem;
 }
 
 .dayCell {
@@ -617,6 +621,35 @@
   color: #16325f;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.extraTag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.1rem;
+  min-width: 7.6rem;
+  border-radius: 999px;
+  padding: 0.25rem 0.7rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.extraTagNeutral {
+  background: #f4f7fb;
+  color: #6d7e9b;
+}
+
+.extraTagWarning {
+  background: #fff4d6;
+  color: #966300;
+}
+
+.extraTagExtraordinary {
+  background: #eef4ff;
+  color: #1b4ba0;
 }
 
 .payBadge {

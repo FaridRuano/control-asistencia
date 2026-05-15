@@ -11,6 +11,7 @@ import {
 
 import { isAuthenticated } from "@/lib/auth";
 import connectToDatabase from "@/lib/db/mongodb";
+import { serializeEmployee } from "@/lib/employees";
 import calculatePayrollEstimate from "@/lib/payroll/calculatePayrollEstimate";
 import AttendancePunch from "@/models/AttendancePunch";
 import Employee from "@/models/Employee";
@@ -106,11 +107,7 @@ export async function GET(request) {
 
     if (!schedules.length) {
       return NextResponse.json({
-        employee: {
-          id: employee._id.toString(),
-          fullName: employee.fullName,
-          salary: employee.salary || 0,
-        },
+        employee: serializeEmployee(employee),
         month: {
           value: format(month, "yyyy-MM"),
         },

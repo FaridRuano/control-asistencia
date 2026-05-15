@@ -1,0 +1,57 @@
+.formPanel {
+  position: relative;
+}
+
+.formHeading {
+  min-height: 3.4rem;
+  display: grid;
+  align-content: start;
+}
+
+.formGrid {
+  margin-top: 0.35rem;
+}
+
+.formEyebrow,
+.formTitle {
+  white-space: nowrap;
+}
+
+.toggleField {
+  align-self: end;
+}
+
+.branchIdentity {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.branchCode {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  border-radius: 999px;
+  background: rgba(31, 111, 255, 0.09);
+  color: #15418f;
+  padding: 0.36rem 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.branchName {
+  color: #10213e;
+}
+
+.locationStack {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.locationItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  color: #4d6487;
+  font-size: 0.88rem;
+}

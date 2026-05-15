@@ -14,6 +14,7 @@ import {
   Upload,
   X,
 } from "lucide-react";
+import { planningModulePath } from "@/lib/modules/planning/routes";
 import styles from "./UploadAttendanceForm.module.scss";
 
 const ACCEPTED_EXTENSIONS = [".xls", ".xlsx"];
@@ -392,7 +393,7 @@ export default function UploadAttendanceForm() {
                   </div>
                   <div className={styles.historyItemSide}>
                     <span className={styles.historyStatus}>{formatUploadStatus(upload.status)}</span>
-                    <Link href={`/dashboard/uploads/${upload.id}`} className={styles.historyAction}>
+                    <Link href={planningModulePath(`/uploads/${upload.id}`)} className={styles.historyAction}>
                       {upload.hasNormalization ? "Abrir revisión" : "Abrir y revisar"}
                     </Link>
                   </div>

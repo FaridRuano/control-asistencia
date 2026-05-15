@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { ArrowLeft, Calculator, Wallet } from "lucide-react";
 
+import { planningModulePath } from "@/lib/modules/planning/routes";
 import styles from "./PayrollEstimateView.module.scss";
 
 function formatMonthLabel(value) {
@@ -34,6 +35,7 @@ export default function PayrollEstimateView({
   const [response, setResponse] = useState(null);
   const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
+  const isInitialLoading = isPending && !response && !error;
 
   const backHref = useMemo(() => {
     const params = new URLSearchParams();
@@ -52,7 +54,7 @@ export default function PayrollEstimateView({
       params.set("month", month);
     }
 
-    return `/dashboard/payroll?${params.toString()}`;
+    return `${planningModulePath("/payroll")}?${params.toString()}`;
   }, [employeeId, employeeName, month]);
 
   useEffect(() => {
@@ -127,6 +129,47 @@ export default function PayrollEstimateView({
 
       {error ? <div className={styles.error}>{error}</div> : null}
 
+      {isInitialLoading ? (
+        <div className={styles.loadingStack} aria-hidden="true">
+          <div className={styles.loadingHero}>
+            <div className={styles.loadingLineLg} />
+            <div className={styles.loadingLineMd} />
+          </div>
+
+          <div className={styles.loadingGrid}>
+            {Array.from({ length: 8 }).map((_, index) => (
+              <div key={index} className={styles.loadingCard}>
+                <div className={styles.loadingLineSm} />
+                <div className={styles.loadingValue} />
+                <div className={styles.loadingLineXs} />
+              </div>
+            ))}
+          </div>
+
+          <div className={styles.loadingTable}>
+            <div className={styles.loadingTableHeader}>
+              <div className={styles.loadingLineMd} />
+              <div className={styles.loadingIcons}>
+                <div className={styles.loadingDot} />
+                <div className={styles.loadingDot} />
+              </div>
+            </div>
+
+            <div className={styles.loadingRows}>
+              {Array.from({ length: 5 }).map((_, index) => (
+                <div key={index} className={styles.loadingRow}>
+                  <div className={styles.loadingCellShort} />
+                  <div className={styles.loadingCellWide} />
+                  <div className={styles.loadingCellShort} />
+                  <div className={styles.loadingCellShort} />
+                  <div className={styles.loadingCellShort} />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {response?.message ? <div className={styles.info}>{response.message}</div> : null}
 
       {response?.summary ? (
@@ -199,7 +242,6 @@ export default function PayrollEstimateView({
                   <tr>
                     <th>Día</th>
                     <th>Horario</th>
-                    <th>Estado</th>
                     <th>Normal</th>
                     <th>Base</th>
                     <th>Suplementaria</th>
@@ -224,7 +266,6 @@ export default function PayrollEstimateView({
                             <span>{row.scheduleLine}</span>
                           </div>
                         </td>
-                        <td>{row.status}</td>
                         <td>{row.normalPaidHours}h</td>
                         <td className={styles.amountCell}>{row.basePayAmountLabel}</td>
                         <td>{row.supplementaryHours}h</td>
@@ -235,7 +276,7 @@ export default function PayrollEstimateView({
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={9} className={styles.emptyCell}>
+                      <td colSpan={8} className={styles.emptyCell}>
                         No hay filas para calcular en este mes.
                       </td>
                     </tr>

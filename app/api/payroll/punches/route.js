@@ -15,6 +15,7 @@ import {
 
 import { isAuthenticated } from "@/lib/auth";
 import connectToDatabase from "@/lib/db/mongodb";
+import { serializeEmployee } from "@/lib/employees";
 import comparePayrollPunches from "@/lib/payroll/comparePayrollPunches";
 import AttendancePunch from "@/models/AttendancePunch";
 import Employee from "@/models/Employee";
@@ -218,13 +219,7 @@ export async function GET(request) {
     );
 
     return NextResponse.json({
-      employee: {
-        id: employee._id.toString(),
-        fullName: employee.fullName,
-        biometricCode: employee.biometricCode || "",
-        branch: employee.branch,
-        department: employee.department || "",
-      },
+      employee: serializeEmployee(employee),
       range: {
         mode: range.mode,
         start: range.start,

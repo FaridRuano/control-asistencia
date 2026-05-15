@@ -111,6 +111,57 @@ function formatWorkedDuration(row, isReadOnly) {
   return `${hours}h ${String(minutes).padStart(2, "0")}m`;
 }
 
+function calculateWorkedMinutes(row) {
+  const typeMeta = getDayTypeMeta(row.dayType);
+
+  if (!typeMeta?.isWorkingDay) {
+    return 0;
+  }
+
+  const startMinutes = parseTimeToMinutes(row.startTime);
+  const endMinutes = parseTimeToMinutes(row.endTime);
+
+  if (startMinutes === null || endMinutes === null || endMinutes <= startMinutes) {
+    return null;
+  }
+
+  const lunchMinutes = row.hasLunch === false ? 0 : normalizeLunchDurationMinutes(row.lunchDurationMinutes);
+  return Math.max(endMinutes - startMinutes - lunchMinutes, 0);
+}
+
+function formatPotentialExtraLabel(row) {
+  const typeMeta = getDayTypeMeta(row.dayType);
+  const workedMinutes = calculateWorkedMinutes(row);
+
+  if (!typeMeta?.isWorkingDay || workedMinutes === null || workedMinutes <= 0) {
+    return { tone: "neutral", label: "--" };
+  }
+
+  if (row.dayType === "weekend_overtime") {
+    const hours = Math.floor(workedMinutes / 60);
+    const minutes = workedMinutes % 60;
+    return {
+      tone: "extraordinary",
+      label: `${hours}h ${String(minutes).padStart(2, "0")}m extra`,
+    };
+  }
+
+  const baseMinutes = 8 * 60;
+
+  if (workedMinutes <= baseMinutes) {
+    return { tone: "neutral", label: "--" };
+  }
+
+  const extraMinutes = workedMinutes - baseMinutes;
+  const hours = Math.floor(extraMinutes / 60);
+  const minutes = extraMinutes % 60;
+
+  return {
+    tone: "warning",
+    label: `+${hours}h ${String(minutes).padStart(2, "0")}m`,
+  };
+}
+
 function buildEmptyWeeklyRows() {
   return buildDefaultWeeklySchedule().map((row) => ({
     ...row,
@@ -524,7 +575,7 @@ export default function WeeklyScheduleManager() {
                 >
                   <span className={styles.employeeName}>{employee.fullName}</span>
                   <span className={styles.employeeMeta}>
-                    {employee.branch} · {employee.biometricCode || "s/n"}
+                    {employee.branch} · {employee.organizationLabel || employee.department || "Sin estructura"} · {employee.biometricCode || "s/n"}
                   </span>
                 </button>
               ))
@@ -677,25 +728,28 @@ export default function WeeklyScheduleManager() {
                 <colgroup>
                   <col className={styles.colDay} />
                   <col className={styles.colType} />
-                  <col className={styles.colTime} />
-                  <col className={styles.colLunch} />
-                  <col className={styles.colTime} />
-                  <col className={styles.colTotal} />
-                </colgroup>
-                <thead>
-                  <tr>
-                    <th>Día</th>
-                    <th>Tipo</th>
+                <col className={styles.colTime} />
+                <col className={styles.colLunch} />
+                <col className={styles.colTime} />
+                <col className={styles.colTotal} />
+                <col className={styles.colExtra} />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>Día</th>
+                  <th>Tipo</th>
                     <th>Entrada</th>
-                    <th>Descuento almuerzo</th>
-                    <th>Salida</th>
-                    <th>Horas total</th>
-                  </tr>
-                </thead>
-                <tbody>
+                  <th>Descuento almuerzo</th>
+                  <th>Salida</th>
+                  <th>Horas total</th>
+                  <th>Extra potencial</th>
+                </tr>
+              </thead>
+              <tbody>
                   {displayRows.map((row) => {
                     const typeMeta = getDayTypeMeta(row.dayType);
                     const disableTimeFields = !typeMeta?.isWorkingDay || isTableReadOnly;
+                    const extraIndicator = formatPotentialExtraLabel(row);
 
                     return (
                       <tr key={row.dayOfWeek}>
@@ -774,6 +828,19 @@ export default function WeeklyScheduleManager() {
                         <td>
                           <span className={styles.totalHoursValue}>
                             {formatWorkedDuration(row, isTableReadOnly)}
+                          </span>
+                        </td>
+                        <td>
+                          <span
+                            className={`${styles.extraTag} ${
+                              extraIndicator.tone === "warning"
+                                ? styles.extraTagWarning
+                                : extraIndicator.tone === "extraordinary"
+                                  ? styles.extraTagExtraordinary
+                                  : styles.extraTagNeutral
+                            }`}
+                          >
+                            {extraIndicator.label}
                           </span>
                         </td>
                       </tr>

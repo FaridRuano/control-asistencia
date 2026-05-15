@@ -1,0 +1,58 @@
+.formPanel {
+  position: relative;
+}
+
+.formHeading {
+  min-height: 3.4rem;
+  display: grid;
+  align-content: start;
+}
+
+.formGrid {
+  margin-top: 0.35rem;
+}
+
+.formEyebrow,
+.formTitle {
+  white-space: nowrap;
+}
+
+.toggleField {
+  align-self: end;
+}
+
+.roleIdentity {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.roleCode {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  border-radius: 999px;
+  background: rgba(31, 111, 255, 0.09);
+  color: #15418f;
+  padding: 0.36rem 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.roleName {
+  color: #10213e;
+}
+
+.roleArea {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  color: #4d6487;
+  font-size: 0.9rem;
+}
+
+.roleDescription {
+  color: #4d6487;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}

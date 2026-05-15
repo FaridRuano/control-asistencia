@@ -34,7 +34,7 @@ export default function LoginForm() {
           throw new Error(payload.error || "No se pudo iniciar sesión.");
         }
 
-        router.push("/dashboard/employees");
+        router.push("/modules");
         router.refresh();
       } catch (requestError) {
         setError(requestError.message);
@@ -45,9 +45,9 @@ export default function LoginForm() {
   return (
     <section className={styles.panel}>
       <p className={styles.eyebrow}>Iniciar sesión</p>
-      <h2 className={styles.title}>Ingresa con la cuenta autorizada</h2>
+      <h2 className={styles.title}>Ingresa al sistema con tu cuenta autorizada</h2>
       <p className={styles.description}>
-        Las credenciales se validan contra valores definidos en el entorno del servidor.
+        Tus credenciales permiten acceder al sistema integral de CHIMG y a los módulos habilitados dentro de la plataforma interna.
       </p>
 
       <form onSubmit={handleSubmit} className={styles.form}>

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import styles from "./LogoutButton.module.scss";
 
-export default function LogoutButton() {
+export default function LogoutButton({ className = "" }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
@@ -25,7 +25,7 @@ export default function LogoutButton() {
       type="button"
       onClick={handleLogout}
       disabled={isPending}
-      className={styles.button}
+      className={`${styles.button} ${className}`.trim()}
     >
       <span className={styles.icon}>
         <Power size={16} />
