@@ -1,22 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import {
-  BriefcaseBusiness,
-  Edit3,
-  Layers3,
-  Plus,
-  Search,
-  Trash2,
-} from "lucide-react";
+import { Edit3, KeyRound, Plus, Search, Trash2 } from "lucide-react";
 
 import CatalogDrawer from "@/components/catalog/CatalogDrawer";
 import CatalogPageLoader from "@/components/catalog/CatalogPageLoader";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import FloatingNotice from "@/components/ui/FloatingNotice";
 import HydrationGate from "@/components/ui/HydrationGate";
-import AreaForm from "./AreaForm";
-import styles from "./AreaManagement.module.scss";
+import UserTypeForm from "./UserTypeForm";
+import styles from "./UserTypeManagement.module.scss";
 
 const INITIAL_FORM = {
   code: "",
@@ -25,23 +18,23 @@ const INITIAL_FORM = {
   isActive: true,
 };
 
-function mapAreaToForm(area) {
+function mapTypeToForm(userType) {
   return {
-    code: area.code || "",
-    name: area.name || "",
-    description: area.description || "",
-    isActive: Boolean(area.isActive),
+    code: userType.code || "",
+    name: userType.name || "",
+    description: userType.description || "",
+    isActive: userType.isActive !== false,
   };
 }
 
-export default function AreaManagement() {
-  const [areas, setAreas] = useState([]);
+export default function UserTypeManagement() {
+  const [userTypes, setUserTypes] = useState([]);
   const [form, setForm] = useState(INITIAL_FORM);
   const [search, setSearch] = useState("");
-  const [editingAreaId, setEditingAreaId] = useState("");
-  const [areaToDelete, setAreaToDelete] = useState(null);
+  const [editingTypeId, setEditingTypeId] = useState("");
+  const [typeToDelete, setTypeToDelete] = useState(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [isLoadingAreas, setIsLoadingAreas] = useState(true);
+  const [isLoadingTypes, setIsLoadingTypes] = useState(true);
   const [notice, setNotice] = useState(null);
   const [isSaving, startSavingTransition] = useTransition();
   const [, startLoadingTransition] = useTransition();
@@ -62,18 +55,7 @@ export default function AreaManagement() {
 
   function dismissNotice() {
     clearNoticeTimers();
-
-    setNotice((current) => {
-      if (!current) {
-        return null;
-      }
-
-      return {
-        ...current,
-        isLeaving: true,
-      };
-    });
-
+    setNotice((current) => (current ? { ...current, isLeaving: true } : null));
     noticeRemoveTimeoutRef.current = window.setTimeout(() => {
       setNotice(null);
       noticeRemoveTimeoutRef.current = null;
@@ -82,7 +64,6 @@ export default function AreaManagement() {
 
   function showNotice(type, message) {
     clearNoticeTimers();
-
     setNotice({ type, message, isLeaving: false });
     noticeExitTimeoutRef.current = window.setTimeout(() => {
       dismissNotice();
@@ -91,86 +72,59 @@ export default function AreaManagement() {
 
   useEffect(() => {
     return () => {
-      if (noticeExitTimeoutRef.current) {
-        window.clearTimeout(noticeExitTimeoutRef.current);
-      }
-
-      if (noticeRemoveTimeoutRef.current) {
-        window.clearTimeout(noticeRemoveTimeoutRef.current);
-      }
+      clearNoticeTimers();
     };
   }, []);
 
   useEffect(() => {
     startLoadingTransition(async () => {
       try {
-        const response = await fetch("/api/areas");
+        const response = await fetch("/api/user-types");
         const payload = await response.json();
 
         if (!response.ok) {
-          throw new Error(payload.error || "No se pudo cargar la lista de áreas.");
+          throw new Error(payload.error || "No se pudo cargar la lista de roles de acceso.");
         }
 
-        setAreas(payload.areas || []);
+        setUserTypes(payload.userTypes || []);
       } catch (requestError) {
-        clearNoticeTimers();
         setNotice({ type: "error", message: requestError.message, isLeaving: false });
-        noticeExitTimeoutRef.current = window.setTimeout(() => {
-          clearNoticeTimers();
-          setNotice((current) => {
-            if (!current) {
-              return null;
-            }
-
-            return {
-              ...current,
-              isLeaving: true,
-            };
-          });
-
-          noticeRemoveTimeoutRef.current = window.setTimeout(() => {
-            setNotice(null);
-            noticeRemoveTimeoutRef.current = null;
-          }, 240);
-        }, 4000);
       } finally {
-        setIsLoadingAreas(false);
+        setIsLoadingTypes(false);
       }
     });
   }, []);
 
-  const filteredAreas = useMemo(() => {
+  const filteredTypes = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
 
     if (!normalizedSearch) {
-      return areas;
+      return userTypes;
     }
 
-    return areas.filter((area) =>
-      [area.code, area.name, area.description]
+    return userTypes.filter((type) =>
+      [type.code, type.name, type.description]
         .filter(Boolean)
         .join(" ")
         .toLowerCase()
         .includes(normalizedSearch),
     );
-  }, [areas, search]);
+  }, [search, userTypes]);
 
-  const canSubmit = useMemo(() => {
-    return Boolean(form.name.trim());
-  }, [form.name]);
+  const canSubmit = useMemo(() => Boolean(form.name.trim()), [form.name]);
 
-  async function refreshAreas() {
-    setIsLoadingAreas(true);
-    const response = await fetch("/api/areas");
+  async function refreshTypes() {
+    setIsLoadingTypes(true);
+    const response = await fetch("/api/user-types");
     const payload = await response.json();
 
     if (!response.ok) {
-      setIsLoadingAreas(false);
-      throw new Error(payload.error || "No se pudo recargar la lista de áreas.");
+      setIsLoadingTypes(false);
+      throw new Error(payload.error || "No se pudo recargar la lista de roles de acceso.");
     }
 
-    setAreas(payload.areas || []);
-    setIsLoadingAreas(false);
+    setUserTypes(payload.userTypes || []);
+    setIsLoadingTypes(false);
   }
 
   function updateField(name, value) {
@@ -180,19 +134,15 @@ export default function AreaManagement() {
     }));
   }
 
-  function resetForm() {
-    setEditingAreaId("");
-    setForm(INITIAL_FORM);
-  }
-
   function openCreateDrawer() {
-    resetForm();
+    setEditingTypeId("");
+    setForm(INITIAL_FORM);
     setIsDrawerOpen(true);
   }
 
   const closeDrawer = useCallback(() => {
     setIsDrawerOpen(false);
-    setEditingAreaId("");
+    setEditingTypeId("");
     setForm(INITIAL_FORM);
   }, []);
 
@@ -201,8 +151,8 @@ export default function AreaManagement() {
 
     startSavingTransition(async () => {
       try {
-        const method = editingAreaId ? "PATCH" : "POST";
-        const endpoint = editingAreaId ? `/api/areas/${editingAreaId}` : "/api/areas";
+        const method = editingTypeId ? "PATCH" : "POST";
+        const endpoint = editingTypeId ? `/api/user-types/${editingTypeId}` : "/api/user-types";
         const response = await fetch(endpoint, {
           method,
           headers: {
@@ -213,15 +163,15 @@ export default function AreaManagement() {
         const payload = await response.json();
 
         if (!response.ok) {
-          throw new Error(payload.error || "No se pudo guardar el área.");
+          throw new Error(payload.error || "No se pudo guardar el rol de acceso.");
         }
 
-        await refreshAreas();
+        await refreshTypes();
         showNotice(
           "success",
-          editingAreaId
-            ? "Área actualizada correctamente."
-            : "Área creada correctamente.",
+          editingTypeId
+            ? "Rol de acceso actualizado correctamente."
+            : "Rol de acceso creado correctamente.",
         );
         closeDrawer();
       } catch (requestError) {
@@ -230,40 +180,31 @@ export default function AreaManagement() {
     });
   }
 
-  function handleEdit(area) {
-    setEditingAreaId(area.id);
-    setForm(mapAreaToForm(area));
+  function handleEdit(userType) {
+    setEditingTypeId(userType.id);
+    setForm(mapTypeToForm(userType));
     setIsDrawerOpen(true);
   }
 
-  function requestDelete(area) {
-    setAreaToDelete(area);
-  }
-
   function confirmDelete() {
-    if (!areaToDelete) {
+    if (!typeToDelete) {
       return;
     }
 
     startSavingTransition(async () => {
       try {
-        const response = await fetch(`/api/areas/${areaToDelete.id}`, {
+        const response = await fetch(`/api/user-types/${typeToDelete.id}`, {
           method: "DELETE",
         });
         const payload = await response.json();
 
         if (!response.ok) {
-          throw new Error(payload.error || "No se pudo eliminar el área.");
+          throw new Error(payload.error || "No se pudo eliminar el rol de acceso.");
         }
 
-        await refreshAreas();
-        showNotice("success", "Área eliminada correctamente.");
-
-        if (editingAreaId === areaToDelete.id) {
-          closeDrawer();
-        }
-
-        setAreaToDelete(null);
+        await refreshTypes();
+        showNotice("success", "Rol de acceso eliminado correctamente.");
+        setTypeToDelete(null);
       } catch (requestError) {
         showNotice("error", requestError.message);
       }
@@ -272,7 +213,7 @@ export default function AreaManagement() {
 
   return (
     <HydrationGate fallback={null}>
-      {isLoadingAreas ? (
+      {isLoadingTypes ? (
         <CatalogPageLoader formVisible={false} />
       ) : (
         <div className="catalog-page-shell">
@@ -282,12 +223,10 @@ export default function AreaManagement() {
             <div className="catalog-table-column">
               <section className="catalog-panel page-entrance page-entrance-delay-sm">
                 <div className="catalog-toolbar">
-                  <div>
-                    <p className="catalog-count">
-                      {filteredAreas.length} área{filteredAreas.length === 1 ? "" : "s"}
-                      {search.trim() ? ` de ${areas.length}` : ""}
-                    </p>
-                  </div>
+                  <p className="catalog-count">
+                    {filteredTypes.length} rol{filteredTypes.length === 1 ? "" : "es"} de acceso
+                    {search.trim() ? ` de ${userTypes.length}` : ""}
+                  </p>
 
                   <label className="catalog-search">
                     <Search size={16} />
@@ -295,7 +234,7 @@ export default function AreaManagement() {
                       type="search"
                       value={search}
                       onChange={(event) => setSearch(event.target.value)}
-                      placeholder="Buscar área"
+                      placeholder="Buscar rol"
                       className="catalog-search-input"
                     />
                   </label>
@@ -306,68 +245,70 @@ export default function AreaManagement() {
                     onClick={openCreateDrawer}
                     aria-haspopup="dialog"
                     aria-expanded={isDrawerOpen}
-                    aria-label="Crear área"
-                    title="Crear área"
+                    aria-label="Crear rol de acceso"
+                    title="Crear rol de acceso"
                   >
                     <Plus size={16} />
                     Crear
                   </button>
                 </div>
 
-                {filteredAreas.length ? (
+                {filteredTypes.length ? (
                   <div className="catalog-table-shell">
                     <div className="catalog-table-scroll">
                       <table className="catalog-table">
                         <thead>
                           <tr>
-                            <th>Área</th>
+                            <th>Tipo</th>
                             <th>Descripción</th>
                             <th>Estado</th>
                             <th>Acciones</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {filteredAreas.map((area) => (
-                            <tr key={area.id}>
+                          {filteredTypes.map((userType) => (
+                            <tr key={userType.id}>
                               <td>
-                                <div className={styles.areaIdentity}>
-                                  <div className={styles.areaCode}>
-                                    <Layers3 size={14} />
-                                    {area.code}
+                                <div className={styles.typeIdentity}>
+                                  <div className={styles.typeCode}>
+                                    <KeyRound size={14} />
+                                    {userType.code}
                                   </div>
-                                  <strong className={styles.areaName}>{area.name}</strong>
+                                  <strong className={styles.typeName}>{userType.name}</strong>
+                                  {userType.isProtected ? (
+                                    <span className={styles.protectedBadge}>Protegido</span>
+                                  ) : null}
                                 </div>
                               </td>
                               <td>
-                                <div className={styles.areaDescription}>
-                                  <span>
-                                    <BriefcaseBusiness size={14} style={{ marginRight: "0.42rem", verticalAlign: "text-bottom" }} />
-                                    {area.description || "Descripción pendiente"}
-                                  </span>
+                                <div className={styles.description}>
+                                  {userType.description || "Descripción pendiente"}
                                 </div>
                               </td>
                               <td>
-                                <span className={`catalog-status-badge ${area.isActive ? "is-active" : "is-inactive"}`}>
-                                  {area.isActive ? "Activa" : "Inactiva"}
+                                <span className={`catalog-status-badge ${userType.isActive ? "is-active" : "is-inactive"}`}>
+                                  {userType.isActive ? "Activo" : "Inactivo"}
                                 </span>
                               </td>
                               <td>
                                 <div className="catalog-row-actions">
                                   <button
                                     type="button"
-                                    onClick={() => handleEdit(area)}
+                                    onClick={() => handleEdit(userType)}
                                     className="catalog-icon-button"
-                                    title="Editar área"
-                                    aria-label={`Editar ${area.name}`}
+                                    title={userType.isProtected ? "Este rol de acceso no se puede editar" : "Editar rol"}
+                                    aria-label={`Editar ${userType.name}`}
+                                    disabled={userType.isProtected}
                                   >
                                     <Edit3 size={16} />
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => requestDelete(area)}
+                                    onClick={() => setTypeToDelete(userType)}
                                     className="catalog-icon-button danger"
-                                    title="Eliminar área"
-                                    aria-label={`Eliminar ${area.name}`}
+                                    title={userType.isProtected ? "Este rol de acceso no se puede eliminar" : "Eliminar rol"}
+                                    aria-label={`Eliminar ${userType.name}`}
+                                    disabled={userType.isProtected}
                                   >
                                     <Trash2 size={16} />
                                   </button>
@@ -381,7 +322,7 @@ export default function AreaManagement() {
                   </div>
                 ) : (
                   <div className="catalog-empty-state">
-                    No encontramos áreas con ese criterio. Si aún no hay registros, crea la primera desde el formulario.
+                    No encontramos roles de acceso con ese criterio.
                   </div>
                 )}
               </section>
@@ -390,13 +331,13 @@ export default function AreaManagement() {
 
           <CatalogDrawer
             isOpen={isDrawerOpen}
-            eyebrow={editingAreaId ? "Modo edición" : "Nuevo registro"}
-            title={editingAreaId ? "Editar área" : "Formulario de área"}
+            eyebrow={editingTypeId ? "Modo edición" : "Nuevo registro"}
+            title={editingTypeId ? "Editar rol de acceso" : "Formulario de rol de acceso"}
             onClose={closeDrawer}
           >
-            <AreaForm
+            <UserTypeForm
               form={form}
-              isEditing={Boolean(editingAreaId)}
+              isEditing={Boolean(editingTypeId)}
               isSaving={isSaving}
               canSubmit={canSubmit}
               onFieldChange={updateField}
@@ -404,13 +345,14 @@ export default function AreaManagement() {
               onSubmit={handleSubmit}
             />
           </CatalogDrawer>
+
           <ConfirmDialog
-            isOpen={Boolean(areaToDelete)}
-            title="Eliminar área"
-            message={`¿Deseas eliminar el área "${areaToDelete?.name || ""}"? Esta acción no se puede deshacer.`}
+            isOpen={Boolean(typeToDelete)}
+            title="Eliminar rol de acceso"
+            message={`¿Deseas eliminar el rol "${typeToDelete?.name || ""}"? Los usuarios existentes conservarán su etiqueta actual.`}
             confirmLabel={isSaving ? "Eliminando..." : "Eliminar"}
             isPending={isSaving}
-            onCancel={() => setAreaToDelete(null)}
+            onCancel={() => setTypeToDelete(null)}
             onConfirm={confirmDelete}
           />
         </div>

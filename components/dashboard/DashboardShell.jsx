@@ -2,8 +2,8 @@
 
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ChevronDown, Menu, X } from "lucide-react";
 
 import LogoutButton from "@/components/auth/LogoutButton";
 import TransitionLink from "@/components/navigation/TransitionLink";
@@ -13,6 +13,7 @@ import styles from "./DashboardShell.module.scss";
 export default function DashboardShell({ title, description, children, moduleConfig = PLANNING_MODULE }) {
   const pathname = usePathname();
   const navigation = moduleConfig.navigation || [];
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [openSection, setOpenSection] = useState(() => {
     const sectionWithActiveChild = navigation.find((section) =>
       section.items.some((item) => item.href === pathname),
@@ -26,13 +27,81 @@ export default function DashboardShell({ title, description, children, moduleCon
       return true;
     }
 
-      return section.items.some((item) => item.href === pathname);
+    return section.items.some((item) => item.href === pathname);
   }
+
+  function closeMobileNavigation() {
+    setIsMobileNavOpen(false);
+  }
+
+  useEffect(() => {
+    if (!isMobileNavOpen) {
+      return undefined;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
+        setIsMobileNavOpen(false);
+      }
+    }
+
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isMobileNavOpen]);
 
   return (
     <div className={styles.page}>
-      <aside className={styles.sidebar}>
+      <button
+        type="button"
+        className={styles.mobileMenuButton}
+        onClick={() => setIsMobileNavOpen(true)}
+        aria-label="Abrir navegación"
+        aria-expanded={isMobileNavOpen}
+        aria-controls="module-sidebar"
+      >
+        <Menu size={20} />
+      </button>
+
+      <div className={styles.mobileBrandBar} aria-hidden="true">
+        <Image
+          src="/imgs/logo-chimg.png"
+          alt=""
+          width={46}
+          height={46}
+          className={styles.mobileBrandLogo}
+          priority
+        />
+      </div>
+
+      {isMobileNavOpen ? (
+        <div
+          className={styles.mobileNavBackdrop}
+          onMouseDown={closeMobileNavigation}
+          aria-hidden="true"
+        />
+      ) : null}
+
+      <aside
+        id="module-sidebar"
+        className={`${styles.sidebar} ${isMobileNavOpen ? styles.sidebarOpen : ""}`}
+      >
         <div className={styles.sidebarMain}>
+          <button
+            type="button"
+            className={styles.mobileCloseButton}
+            onClick={closeMobileNavigation}
+            aria-label="Cerrar navegación"
+          >
+            <X size={18} />
+          </button>
+
           <div className={styles.brand}>
             <div className={styles.logoWrap}>
               <Image
@@ -51,7 +120,11 @@ export default function DashboardShell({ title, description, children, moduleCon
             </div>
           </div>
 
-          <TransitionLink href={moduleConfig.modulesHref || "/modules"} className={styles.moduleSwitcher}>
+          <TransitionLink
+            href={moduleConfig.modulesHref || "/modules"}
+            className={styles.moduleSwitcher}
+            onClick={closeMobileNavigation}
+          >
             Cambiar módulo
           </TransitionLink>
 
@@ -70,6 +143,7 @@ export default function DashboardShell({ title, description, children, moduleCon
                     <TransitionLink
                       href={section.href}
                       className={`${styles.navSectionLink} ${isActive ? styles.navSectionLinkActive : ""}`}
+                      onClick={closeMobileNavigation}
                     >
                       <span className={styles.navSectionTitle}>{section.title}</span>
                     </TransitionLink>
@@ -98,6 +172,7 @@ export default function DashboardShell({ title, description, children, moduleCon
                             <TransitionLink
                               href={item.href}
                               className={`${styles.navItem} ${active ? styles.navItemActive : ""}`}
+                              onClick={closeMobileNavigation}
                             >
                               <span className={styles.navLabel}>{item.label}</span>
                             </TransitionLink>

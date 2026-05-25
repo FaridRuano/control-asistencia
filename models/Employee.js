@@ -2,6 +2,18 @@ import mongoose, { Schema } from "mongoose";
 
 const employeeSchema = new Schema(
   {
+    documentType: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      default: "cedula",
+    },
+    dni: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      default: "",
+    },
     biometricCode: {
       type: String,
       trim: true,
@@ -10,18 +22,56 @@ const employeeSchema = new Schema(
     fullName: {
       type: String,
       required: true,
-      unique: true,
       trim: true,
+      uppercase: true,
+    },
+    personalEmail: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      default: "",
+    },
+    address: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    phone: {
+      type: String,
+      trim: true,
+      default: "",
     },
     salary: {
       type: Number,
       default: 0,
       min: 0,
     },
+    birthDate: {
+      type: Date,
+      default: null,
+    },
+    branchId: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    branchCode: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      default: "",
+    },
+    branchName: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      default: "",
+    },
     branch: {
       type: String,
-      enum: ["AMBATO", "SALCEDO"],
-      default: "AMBATO",
+      trim: true,
+      uppercase: true,
+      default: "",
     },
     areaCode: {
       type: String,
@@ -59,11 +109,21 @@ const employeeSchema = new Schema(
 );
 
 employeeSchema.index(
+  { dni: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      dni: { $type: "string", $gt: "" },
+    },
+  },
+);
+
+employeeSchema.index(
   { biometricCode: 1 },
   {
     unique: true,
     partialFilterExpression: {
-      biometricCode: { $type: "string", $ne: "" },
+      biometricCode: { $type: "string", $gt: "" },
     },
   },
 );

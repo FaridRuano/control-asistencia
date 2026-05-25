@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   Building2,
-  EyeOff,
   Edit3,
   Landmark,
   MapPin,
@@ -12,10 +11,12 @@ import {
   Trash2,
 } from "lucide-react";
 
+import CatalogDrawer from "@/components/catalog/CatalogDrawer";
 import CatalogPageLoader from "@/components/catalog/CatalogPageLoader";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import FloatingNotice from "@/components/ui/FloatingNotice";
 import HydrationGate from "@/components/ui/HydrationGate";
-import usePersistentBooleanPreference from "@/hooks/usePersistentBooleanPreference";
+import BranchForm from "./BranchForm";
 import styles from "./BranchManagement.module.scss";
 
 const INITIAL_FORM = {
@@ -25,8 +26,6 @@ const INITIAL_FORM = {
   address: "",
   isActive: true,
 };
-
-const BRANCH_FORM_VISIBILITY_PREFERENCE_KEY = "company.branches.formVisible";
 
 function mapBranchToForm(branch) {
   return {
@@ -43,16 +42,14 @@ export default function BranchManagement() {
   const [form, setForm] = useState(INITIAL_FORM);
   const [search, setSearch] = useState("");
   const [editingBranchId, setEditingBranchId] = useState("");
+  const [branchToDelete, setBranchToDelete] = useState(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isLoadingBranches, setIsLoadingBranches] = useState(true);
   const [notice, setNotice] = useState(null);
   const [isSaving, startSavingTransition] = useTransition();
   const [, startLoadingTransition] = useTransition();
   const noticeExitTimeoutRef = useRef(null);
   const noticeRemoveTimeoutRef = useRef(null);
-  const [isFormVisible, setIsFormVisible] = usePersistentBooleanPreference(
-    BRANCH_FORM_VISIBILITY_PREFERENCE_KEY,
-    true,
-  );
 
   function clearNoticeTimers() {
     if (noticeExitTimeoutRef.current) {
@@ -188,8 +185,18 @@ export default function BranchManagement() {
   function resetForm() {
     setEditingBranchId("");
     setForm(INITIAL_FORM);
-    setIsFormVisible(true);
   }
+
+  function openCreateDrawer() {
+    resetForm();
+    setIsDrawerOpen(true);
+  }
+
+  const closeDrawer = useCallback(() => {
+    setIsDrawerOpen(false);
+    setEditingBranchId("");
+    setForm(INITIAL_FORM);
+  }, []);
 
   function handleSubmit(event) {
     event.preventDefault();
@@ -218,7 +225,7 @@ export default function BranchManagement() {
             ? "Sucursal actualizada correctamente."
             : "Sucursal creada correctamente.",
         );
-        resetForm();
+        closeDrawer();
       } catch (requestError) {
         showNotice("error", requestError.message);
       }
@@ -228,19 +235,21 @@ export default function BranchManagement() {
   function handleEdit(branch) {
     setEditingBranchId(branch.id);
     setForm(mapBranchToForm(branch));
-    setIsFormVisible(true);
+    setIsDrawerOpen(true);
   }
 
-  function handleDelete(branch) {
-    const confirmed = window.confirm(`¿Deseas eliminar la sucursal "${branch.name}"?`);
+  function requestDelete(branch) {
+    setBranchToDelete(branch);
+  }
 
-    if (!confirmed) {
+  function confirmDelete() {
+    if (!branchToDelete) {
       return;
     }
 
     startSavingTransition(async () => {
       try {
-        const response = await fetch(`/api/branches/${branch.id}`, {
+        const response = await fetch(`/api/branches/${branchToDelete.id}`, {
           method: "DELETE",
         });
         const payload = await response.json();
@@ -252,9 +261,11 @@ export default function BranchManagement() {
         await refreshBranches();
         showNotice("success", "Sucursal eliminada correctamente.");
 
-        if (editingBranchId === branch.id) {
-          resetForm();
+        if (editingBranchId === branchToDelete.id) {
+          closeDrawer();
         }
+
+        setBranchToDelete(null);
       } catch (requestError) {
         showNotice("error", requestError.message);
       }
@@ -264,99 +275,12 @@ export default function BranchManagement() {
   return (
     <HydrationGate fallback={null}>
       {isLoadingBranches ? (
-        <CatalogPageLoader formVisible={isFormVisible} />
+        <CatalogPageLoader formVisible={false} />
       ) : (
         <div className="catalog-page-shell">
           <FloatingNotice notice={notice} onClose={dismissNotice} />
 
-          <div className="catalog-page-body">
-            <div className="catalog-form-rail">
-              <div className={`catalog-form-column ${!isFormVisible ? "is-hidden" : ""}`}>
-                <section className={`catalog-panel page-entrance ${styles.formPanel}`}>
-                  <div className="catalog-panel-shell">
-                    <div className="catalog-section-head">
-                      <div className={styles.formHeading}>
-                        <p className={`catalog-section-eyebrow ${styles.formEyebrow}`}>
-                          {editingBranchId ? "Modo edición" : "Nuevo registro"}
-                        </p>
-                        <h3 className={`catalog-section-title ${styles.formTitle}`}>
-                          {editingBranchId ? "Editar sucursal" : "Formulario de sucursal"}
-                        </h3>
-                      </div>
-                    </div>
-
-                    <div className="catalog-panel-body">
-                      <form onSubmit={handleSubmit} className={`catalog-form-grid ${styles.formGrid}`}>
-                        <label className="catalog-field">
-                          <span className="catalog-label">Código</span>
-                          <input
-                            value={form.code}
-                            onChange={(event) => updateField("code", event.target.value.toUpperCase())}
-                            className="catalog-input"
-                            placeholder="Se genera automáticamente si lo dejas vacío"
-                          />
-                        </label>
-
-                        <label className="catalog-field">
-                          <span className="catalog-label">Nombre</span>
-                          <input
-                            value={form.name}
-                            onChange={(event) => updateField("name", event.target.value)}
-                            className="catalog-input"
-                            placeholder="Ej. Ambato matriz"
-                            required
-                          />
-                        </label>
-
-                        <label className="catalog-field">
-                          <span className="catalog-label">Ciudad</span>
-                          <input
-                            value={form.city}
-                            onChange={(event) => updateField("city", event.target.value)}
-                            className="catalog-input"
-                            placeholder="Ej. Ambato"
-                          />
-                        </label>
-
-                        <label className="catalog-field">
-                          <span className="catalog-label">Dirección</span>
-                          <input
-                            value={form.address}
-                            onChange={(event) => updateField("address", event.target.value)}
-                            className="catalog-input"
-                            placeholder="Ej. Av. principal y calle secundaria"
-                          />
-                        </label>
-
-                        <label className={`catalog-field ${styles.toggleField}`}>
-                          <span className="catalog-label">Estado</span>
-                          <button
-                            type="button"
-                            className={`catalog-toggle ${form.isActive ? "is-active" : ""}`}
-                            onClick={() => updateField("isActive", !form.isActive)}
-                            aria-pressed={form.isActive}
-                          >
-                            <span>{form.isActive ? "Activa" : "Inactiva"}</span>
-                          </button>
-                        </label>
-
-                        <div className="catalog-actions">
-                          <button type="submit" disabled={isSaving || !canSubmit} className="catalog-button-primary">
-                            <Plus size={16} />
-                            {isSaving ? "Guardando..." : editingBranchId ? "Actualizar" : "Crear"}
-                          </button>
-
-                          <button type="button" onClick={resetForm} disabled={isSaving} className="catalog-button-ghost">
-                            Limpiar
-                          </button>
-                        </div>
-                      </form>
-                    </div>
-                  </div>
-                </section>
-              </div>
-            </div>
-
+          <div className={`catalog-page-body ${styles.fullWidthBody}`}>
             <div className="catalog-table-column">
               <section className="catalog-panel page-entrance page-entrance-delay-sm">
                 <div className="catalog-toolbar">
@@ -380,13 +304,15 @@ export default function BranchManagement() {
 
                   <button
                     type="button"
-                    className={isFormVisible ? "catalog-button-ghost" : "catalog-button-primary"}
-                    onClick={() => setIsFormVisible(!isFormVisible)}
-                    aria-expanded={isFormVisible}
-                    aria-label={isFormVisible ? "Ocultar formulario" : "Crear sucursal"}
-                    title={isFormVisible ? "Ocultar formulario" : "Crear sucursal"}
+                    className="catalog-button-primary"
+                    onClick={openCreateDrawer}
+                    aria-haspopup="dialog"
+                    aria-expanded={isDrawerOpen}
+                    aria-label="Crear sucursal"
+                    title="Crear sucursal"
                   >
-                    {isFormVisible ? <EyeOff size={16} /> : <Plus size={16} />}
+                    <Plus size={16} />
+                    Crear
                   </button>
                 </div>
 
@@ -444,7 +370,7 @@ export default function BranchManagement() {
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => handleDelete(branch)}
+                                    onClick={() => requestDelete(branch)}
                                     className="catalog-icon-button danger"
                                     title="Eliminar sucursal"
                                     aria-label={`Eliminar ${branch.name}`}
@@ -468,6 +394,32 @@ export default function BranchManagement() {
               </section>
             </div>
           </div>
+
+          <CatalogDrawer
+            isOpen={isDrawerOpen}
+            eyebrow={editingBranchId ? "Modo edición" : "Nuevo registro"}
+            title={editingBranchId ? "Editar sucursal" : "Formulario de sucursal"}
+            onClose={closeDrawer}
+          >
+            <BranchForm
+              form={form}
+              isEditing={Boolean(editingBranchId)}
+              isSaving={isSaving}
+              canSubmit={canSubmit}
+              onFieldChange={updateField}
+              onCancel={closeDrawer}
+              onSubmit={handleSubmit}
+            />
+          </CatalogDrawer>
+          <ConfirmDialog
+            isOpen={Boolean(branchToDelete)}
+            title="Eliminar sucursal"
+            message={`¿Deseas eliminar la sucursal "${branchToDelete?.name || ""}"? Esta acción no se puede deshacer.`}
+            confirmLabel={isSaving ? "Eliminando..." : "Eliminar"}
+            isPending={isSaving}
+            onCancel={() => setBranchToDelete(null)}
+            onConfirm={confirmDelete}
+          />
         </div>
       )}
     </HydrationGate>

@@ -1,84 +1,200 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { createPortal } from "react-dom";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   BriefcaseBusiness,
-  CheckCircle2,
   Edit3,
   Landmark,
-  PencilLine,
   Plus,
   ReceiptText,
   Search,
-  ShieldCheck,
-  TimerReset,
   Trash2,
   UserRound,
-  X,
 } from "lucide-react";
 
+import CatalogDrawer from "@/components/catalog/CatalogDrawer";
+import CatalogPageLoader from "@/components/catalog/CatalogPageLoader";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import FloatingNotice from "@/components/ui/FloatingNotice";
 import { planningModulePath } from "@/lib/modules/planning/routes";
-import { BRANCH_OPTIONS, getRoleConfig, getRolesForArea, ORGANIZATION_AREAS } from "@/lib/organization";
+import EmployeeDetailModal from "./EmployeeDetailModal";
+import EmployeeForm from "./EmployeeForm";
 import styles from "./EmployeeManagement.module.scss";
 
 const INITIAL_FORM = {
-  biometricCode: "",
+  documentType: "cedula",
+  dni: "",
   fullName: "",
-  salary: "",
-  branch: "AMBATO",
-  areaCode: "",
+  personalEmail: "",
+  address: "",
+  phone: "",
+  branchId: "",
+  branchCode: "",
+  branchName: "",
   roleCode: "",
+  roleName: "",
+  areaCode: "",
+  areaName: "",
+  salary: "",
+  birthDate: "",
+  biometricCode: "",
+  isActive: true,
 };
 
-function mapEmployeeToForm(employee) {
+function mapEmployeeToForm(employee, branches = [], roles = []) {
+  const branch = branches.find((candidate) => {
+    const employeeBranch = String(employee.branchName || employee.branch || employee.branchCode || "").toUpperCase();
+
+    return [candidate.id, candidate.code, candidate.name]
+      .map((value) => String(value || "").toUpperCase())
+      .includes(employeeBranch);
+  });
+  const role = roles.find((candidate) => {
+    const employeeRoleCode = String(employee.roleCode || "").toUpperCase();
+    const employeeRoleName = String(employee.roleName || "").toUpperCase();
+
+    return (
+      String(candidate.code || "").toUpperCase() === employeeRoleCode ||
+      String(candidate.name || "").toUpperCase() === employeeRoleName
+    );
+  });
+
   return {
-    biometricCode: employee.biometricCode || "",
+    documentType: employee.documentType || "cedula",
+    dni: employee.dni || "",
     fullName: employee.fullName || "",
+    personalEmail: employee.personalEmail || "",
+    address: employee.address || "",
+    phone: employee.phone || "",
+    branchId: employee.branchId || branch?.id || "",
+    branchCode: employee.branchCode || branch?.code || "",
+    branchName: employee.branchName || employee.branch || branch?.name || "",
+    roleCode: role?.code || employee.roleCode || "",
+    roleName: role?.name || employee.roleName || "",
+    areaCode: role?.areaCode || employee.areaCode || "",
+    areaName: role?.areaName || employee.areaName || "",
     salary: String(employee.salary ?? ""),
-    branch: employee.branch || "AMBATO",
-    areaCode: employee.areaCode || "",
-    roleCode: employee.roleCode || "",
+    birthDate: employee.birthDate || "",
+    biometricCode: employee.biometricCode || "",
+    isActive: employee.isActive !== false,
   };
+}
+
+function buildEmployeeSearchText(employee) {
+  return [
+    employee.documentType,
+    employee.dni,
+    employee.fullName,
+    employee.personalEmail,
+    employee.phone,
+    employee.address,
+    employee.branchName,
+    employee.branch,
+    employee.roleName,
+    employee.areaName,
+    employee.biometricCode,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
 }
 
 export default function EmployeeManagement() {
   const [employees, setEmployees] = useState([]);
+  const [branches, setBranches] = useState([]);
+  const [roles, setRoles] = useState([]);
   const [form, setForm] = useState(INITIAL_FORM);
   const [search, setSearch] = useState("");
   const [editingEmployeeId, setEditingEmployeeId] = useState("");
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [employeeToDelete, setEmployeeToDelete] = useState(null);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [notice, setNotice] = useState(null);
   const [isPending, startTransition] = useTransition();
-  const toastTimeoutRef = useRef(null);
-  const canUseDOM = typeof document !== "undefined";
+  const noticeExitTimeoutRef = useRef(null);
+  const noticeRemoveTimeoutRef = useRef(null);
+
+  const clearNoticeTimers = useCallback(() => {
+    if (noticeExitTimeoutRef.current) {
+      window.clearTimeout(noticeExitTimeoutRef.current);
+      noticeExitTimeoutRef.current = null;
+    }
+
+    if (noticeRemoveTimeoutRef.current) {
+      window.clearTimeout(noticeRemoveTimeoutRef.current);
+      noticeRemoveTimeoutRef.current = null;
+    }
+  }, []);
+
+  const dismissNotice = useCallback(() => {
+    clearNoticeTimers();
+    setNotice((current) => (current ? { ...current, isLeaving: true } : null));
+    noticeRemoveTimeoutRef.current = window.setTimeout(() => {
+      setNotice(null);
+      noticeRemoveTimeoutRef.current = null;
+    }, 240);
+  }, [clearNoticeTimers]);
+
+  const showNotice = useCallback((type, message) => {
+    clearNoticeTimers();
+    setNotice({ type, message, isLeaving: false });
+    noticeExitTimeoutRef.current = window.setTimeout(dismissNotice, 4000);
+  }, [clearNoticeTimers, dismissNotice]);
+
+  useEffect(() => {
+    return () => {
+      clearNoticeTimers();
+    };
+  }, [clearNoticeTimers]);
+
+  async function loadData() {
+    const [employeesResponse, branchesResponse, rolesResponse] = await Promise.all([
+      fetch("/api/employees"),
+      fetch("/api/branches"),
+      fetch("/api/roles"),
+    ]);
+    const [employeesPayload, branchesPayload, rolesPayload] = await Promise.all([
+      employeesResponse.json(),
+      branchesResponse.json(),
+      rolesResponse.json(),
+    ]);
+
+    if (!employeesResponse.ok) {
+      throw new Error(employeesPayload.error || "No se pudo cargar la lista de empleados.");
+    }
+
+    if (!branchesResponse.ok) {
+      throw new Error(branchesPayload.error || "No se pudo cargar la lista de sucursales.");
+    }
+
+    if (!rolesResponse.ok) {
+      throw new Error(rolesPayload.error || "No se pudo cargar la lista de roles.");
+    }
+
+    setEmployees(employeesPayload.employees || []);
+    setBranches(branchesPayload.branches || []);
+    setRoles(rolesPayload.roles || []);
+  }
 
   useEffect(() => {
     startTransition(async () => {
       try {
-        const response = await fetch("/api/employees");
-        const payload = await response.json();
-
-        if (!response.ok) {
-          throw new Error(payload.error || "No se pudo cargar la lista de empleados.");
-        }
-
-        setEmployees(payload.employees || []);
+        await loadData();
       } catch (requestError) {
-        setError(requestError.message);
+        showNotice("error", requestError.message);
+      } finally {
+        setIsLoading(false);
       }
     });
-  }, []);
+  }, [showNotice]);
 
   const sortedEmployees = useMemo(
-    () =>
-      [...employees].sort((left, right) =>
-        left.fullName.localeCompare(right.fullName, "es"),
-      ),
+    () => [...employees].sort((left, right) => left.fullName.localeCompare(right.fullName, "es")),
     [employees],
   );
+
   const filteredEmployees = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
 
@@ -86,70 +202,60 @@ export default function EmployeeManagement() {
       return sortedEmployees;
     }
 
-    return sortedEmployees.filter((employee) => {
-      const haystack = [
-        employee.fullName,
-        employee.branch,
-        employee.biometricCode,
-        employee.areaName,
-        employee.roleName,
-        employee.department,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-
-      return haystack.includes(normalizedSearch);
-    });
+    return sortedEmployees.filter((employee) =>
+      buildEmployeeSearchText(employee).includes(normalizedSearch),
+    );
   }, [search, sortedEmployees]);
 
-  useEffect(() => {
-    return () => {
-      if (toastTimeoutRef.current) {
-        clearTimeout(toastTimeoutRef.current);
-      }
-    };
-  }, []);
+  const canSubmit = useMemo(() => Boolean(form.fullName.trim()), [form.fullName]);
 
-  const roleOptions = useMemo(() => getRolesForArea(form.areaCode), [form.areaCode]);
-  const selectedRoleConfig = useMemo(
-    () => getRoleConfig(form.areaCode, form.roleCode),
-    [form.areaCode, form.roleCode],
-  );
-
-  function updateField(name, value) {
-    setForm((current) => {
-      if (name === "areaCode") {
-        return {
-          ...current,
-          areaCode: value,
-          roleCode: "",
-        };
-      }
-
-      return {
-        ...current,
-        [name]: value,
-      };
-    });
-  }
-
-  function resetForm() {
+  const closeDrawer = useCallback(() => {
+    setIsDrawerOpen(false);
     setEditingEmployeeId("");
     setForm(INITIAL_FORM);
+  }, []);
+
+  function updateField(name, value) {
+    setForm((current) => ({
+      ...current,
+      [name]: value,
+    }));
   }
 
-  function showSuccessToast(message) {
-    setSuccess(message);
+  function handleBranchChange(branchId) {
+    const branch = branches.find((candidate) => candidate.id === branchId);
 
-    if (toastTimeoutRef.current) {
-      clearTimeout(toastTimeoutRef.current);
-    }
+    setForm((current) => ({
+      ...current,
+      branchId: branch?.id || "",
+      branchCode: branch?.code || "",
+      branchName: branch?.name || "",
+    }));
+  }
 
-    toastTimeoutRef.current = setTimeout(() => {
-      setSuccess("");
-      toastTimeoutRef.current = null;
-    }, 5000);
+  function handleRoleChange(roleCode) {
+    const role = roles.find((candidate) => candidate.code === roleCode);
+
+    setForm((current) => ({
+      ...current,
+      roleCode: role?.code || "",
+      roleName: role?.name || "",
+      areaCode: role?.areaCode || "",
+      areaName: role?.areaName || "",
+    }));
+  }
+
+  function openCreateDrawer() {
+    setEditingEmployeeId("");
+    setForm(INITIAL_FORM);
+    setIsDrawerOpen(true);
+  }
+
+  function handleEdit(employee) {
+    setSelectedEmployee(null);
+    setEditingEmployeeId(employee.id);
+    setForm(mapEmployeeToForm(employee, branches, roles));
+    setIsDrawerOpen(true);
   }
 
   async function refreshEmployees() {
@@ -165,16 +271,11 @@ export default function EmployeeManagement() {
 
   function handleSubmit(event) {
     event.preventDefault();
-    setError("");
-    setSuccess("");
 
     startTransition(async () => {
       try {
         const method = editingEmployeeId ? "PATCH" : "POST";
-        const endpoint = editingEmployeeId
-          ? `/api/employees/${editingEmployeeId}`
-          : "/api/employees";
-
+        const endpoint = editingEmployeeId ? `/api/employees/${editingEmployeeId}` : "/api/employees";
         const response = await fetch(endpoint, {
           method,
           headers: {
@@ -182,10 +283,9 @@ export default function EmployeeManagement() {
           },
           body: JSON.stringify({
             ...form,
-            salary: Number(form.salary),
+            salary: Number(form.salary || 0),
           }),
         });
-
         const payload = await response.json();
 
         if (!response.ok) {
@@ -193,23 +293,12 @@ export default function EmployeeManagement() {
         }
 
         await refreshEmployees();
-        showSuccessToast(
-          editingEmployeeId
-            ? "Empleado actualizado correctamente."
-            : "Empleado creado correctamente.",
-        );
-        resetForm();
+        showNotice("success", editingEmployeeId ? "Empleado actualizado correctamente." : "Empleado creado correctamente.");
+        closeDrawer();
       } catch (requestError) {
-        setError(requestError.message);
+        showNotice("error", requestError.message);
       }
     });
-  }
-
-  function handleEdit(employee) {
-    setError("");
-    setSuccess("");
-    setEditingEmployeeId(employee.id);
-    setForm(mapEmployeeToForm(employee));
   }
 
   function requestDelete(employee) {
@@ -220,9 +309,6 @@ export default function EmployeeManagement() {
     if (!employeeToDelete) {
       return;
     }
-
-    setError("");
-    setSuccess("");
 
     startTransition(async () => {
       try {
@@ -236,308 +322,140 @@ export default function EmployeeManagement() {
         }
 
         await refreshEmployees();
-        showSuccessToast("Empleado eliminado correctamente.");
+        setSelectedEmployee(null);
+        showNotice("success", "Empleado eliminado correctamente.");
 
         if (editingEmployeeId === employeeToDelete.id) {
-          resetForm();
+          closeDrawer();
         }
 
         setEmployeeToDelete(null);
       } catch (requestError) {
-        setError(requestError.message);
+        showNotice("error", requestError.message);
       }
     });
   }
 
+  if (isLoading) {
+    return <CatalogPageLoader formVisible={false} />;
+  }
+
   return (
-    <>
-      {success ? (
-        <div className={styles.toast} role="status" aria-live="polite">
-          <div className={styles.toastIcon}>
-            <CheckCircle2 size={18} />
-          </div>
-          <div className={styles.toastContent}>
-            <p className={styles.toastTitle}>Operación exitosa</p>
-            <p className={styles.toastMessage}>{success}</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setSuccess("")}
-            className={styles.toastClose}
-            aria-label="Cerrar notificación"
-          >
-            <X size={16} />
-          </button>
-        </div>
-      ) : null}
+    <div className="catalog-page-shell">
+      <FloatingNotice notice={notice} onClose={dismissNotice} />
 
-      {canUseDOM && employeeToDelete
-        ? createPortal(
-            <div
-              className={styles.modalOverlay}
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="delete-employee-title"
-            >
-              <div className={styles.modal}>
-                <h3 id="delete-employee-title" className={styles.modalTitle}>
-                  Confirmar eliminación
-                </h3>
-                <p className={styles.modalText}>
-                  ¿Deseas eliminar a <strong>{employeeToDelete.fullName}</strong>? Esta acción no se puede deshacer.
-                </p>
-                <div className={styles.modalActions}>
-                  <button
-                    type="button"
-                    onClick={() => setEmployeeToDelete(null)}
-                    disabled={isPending}
-                    className={styles.buttonGhost}
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={confirmDelete}
-                    disabled={isPending}
-                    className={styles.buttonDanger}
-                  >
-                    {isPending ? "Eliminando..." : "Eliminar empleado"}
-                  </button>
-                </div>
-              </div>
-            </div>,
-            document.body,
-          )
-        : null}
-
-      <div className={styles.layout}>
-      <section className={styles.panel}>
-        <h2 className={styles.panelTitle}>
-          {editingEmployeeId ? "Editar empleado" : "Registrar empleado"}
-        </h2>
-        <p className={styles.panelDescription}>
-          El nombre completo será la referencia principal para relacionar al empleado con el reporte Excel.
-        </p>
-
-        <form onSubmit={handleSubmit} className={styles.form}>
-          <label className={styles.field}>
-            <span className={styles.label}>Nombre completo</span>
-            <input
-              value={form.fullName}
-              onChange={(event) => updateField("fullName", event.target.value)}
-              className={styles.input}
-              required
-            />
-          </label>
-
-          <label className={styles.field}>
-            <span className={styles.label}>Sueldo</span>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={form.salary}
-              onChange={(event) => updateField("salary", event.target.value)}
-              className={styles.input}
-              required
-            />
-          </label>
-
-          <label className={styles.field}>
-            <span className={styles.label}>Sucursal</span>
-            <select
-              value={form.branch}
-              onChange={(event) => updateField("branch", event.target.value)}
-              className={styles.select}
-              required
-            >
-              {BRANCH_OPTIONS.map((branch) => (
-                <option key={branch} value={branch}>
-                  {branch}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className={styles.field}>
-            <span className={styles.label}>Área</span>
-            <select
-              value={form.areaCode}
-              onChange={(event) => updateField("areaCode", event.target.value)}
-              className={styles.select}
-              required
-            >
-              <option value="">Selecciona un área</option>
-              {ORGANIZATION_AREAS.map((area) => (
-                <option key={area.code} value={area.code}>
-                  {area.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className={styles.field}>
-            <span className={styles.label}>Rol</span>
-            <select
-              value={form.roleCode}
-              onChange={(event) => updateField("roleCode", event.target.value)}
-              className={styles.select}
-              required
-              disabled={!form.areaCode}
-            >
-              <option value="">Selecciona un rol</option>
-              {roleOptions.map((role) => (
-                <option key={role.code} value={role.code}>
-                  {role.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className={styles.field}>
-            <span className={styles.label}>Código biométrico opcional</span>
-            <input
-              value={form.biometricCode}
-              onChange={(event) => updateField("biometricCode", event.target.value)}
-              className={styles.input}
-            />
-          </label>
-
-          {selectedRoleConfig ? (
-            <div className={styles.ruleCard}>
-              <p className={styles.ruleTitle}>Regla base inicial del rol</p>
-              <div className={styles.ruleGrid}>
-                <span className={styles.ruleChip}>
-                  <BriefcaseBusiness size={14} />
-                  {selectedRoleConfig.scheduleProfile}
-                </span>
-                <span className={styles.ruleChip}>
-                  <TimerReset size={14} />
-                  Almuerzo {selectedRoleConfig.lunchMinutes} min
-                </span>
-                {selectedRoleConfig.weeklyRotation ? (
-                  <span className={styles.ruleChip}>
-                    <ShieldCheck size={14} />
-                    {selectedRoleConfig.weeklyRotation}
-                  </span>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-
-          <div className={styles.actions}>
-            <button
-              type="submit"
-              disabled={isPending}
-              className={styles.buttonPrimary}
-            >
-              <span className={styles.buttonIcon}>
-                {editingEmployeeId ? <PencilLine size={16} /> : <Plus size={16} />}
-              </span>
-              {isPending
-                ? "Guardando..."
-                : editingEmployeeId
-                  ? "Actualizar"
-                  : "Crear empleado"}
-            </button>
-
-            <button
-              type="button"
-              onClick={resetForm}
-              disabled={isPending}
-              className={styles.buttonGhost}
-            >
-              Limpiar
-            </button>
-          </div>
-        </form>
-
-        {error ? <div className={`${styles.feedback} ${styles.error}`}>{error}</div> : null}
-      </section>
-
-      <section>
-        <div className={styles.toolbar}>
-          <p className={styles.count}>
-            {filteredEmployees.length} empleado{filteredEmployees.length === 1 ? "" : "s"} visible
-            {filteredEmployees.length === 1 ? "" : "s"}
-            {search.trim() ? ` de ${sortedEmployees.length}` : ""}.
+      <section className={`catalog-panel page-entrance ${styles.tablePanel}`}>
+        <div className="catalog-toolbar">
+          <p className="catalog-count">
+            {filteredEmployees.length} empleado{filteredEmployees.length === 1 ? "" : "s"}
+            {search.trim() ? ` de ${sortedEmployees.length}` : ""}
           </p>
-          <label className={styles.searchField}>
+
+          <label className="catalog-search">
             <Search size={16} />
             <input
               type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Buscar empleado"
-              className={styles.searchInput}
+              className="catalog-search-input"
             />
           </label>
+
+          <button
+            type="button"
+            className="catalog-button-primary"
+            onClick={openCreateDrawer}
+            aria-haspopup="dialog"
+            aria-expanded={isDrawerOpen}
+            aria-label="Crear empleado"
+            title="Crear empleado"
+          >
+            <Plus size={16} />
+            Crear
+          </button>
         </div>
 
         {filteredEmployees.length ? (
-          <div className={styles.tableWrap}>
-            <div className={styles.scroll}>
-              <table className={styles.table}>
+          <div className="catalog-table-shell">
+            <div className="catalog-table-scroll">
+              <table className={`catalog-table ${styles.table}`}>
                 <thead>
                   <tr>
-                    <th>Nombre completo</th>
+                    <th>Empleado</th>
+                    <th>Documento</th>
+                    <th>Contacto</th>
+                    <th>Sucursal</th>
+                    <th>Rol</th>
                     <th>Sueldo</th>
-                    <th>Estructura</th>
-                    <th>Identificación</th>
+                    <th>Nacimiento</th>
+                    <th>Biométrico</th>
+                    <th>Estado</th>
                     <th>Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredEmployees.map((employee) => (
-                    <tr key={employee.id}>
+                    <tr
+                      key={employee.id}
+                      className={styles.employeeRow}
+                      onDoubleClick={() => setSelectedEmployee(employee)}
+                    >
                       <td>
-                        <div className={styles.name}>{employee.fullName}</div>
-                        <div className={styles.metaLine}>
-                          <span className={styles.metaItem}>
-                            <UserRound size={14} />
-                            {employee.organizationLabel}
-                          </span>
+                        <div className={styles.employeeName}>{employee.fullName}</div>
+                        <span className={styles.employeeMeta}>
+                          <UserRound size={14} />
+                          {employee.organizationLabel || "Estructura pendiente"}
+                        </span>
+                      </td>
+                      <td>
+                        <div className={styles.stack}>
+                          <strong>{employee.documentType || "cedula"}</strong>
+                          <span>{employee.dni || "DNI pendiente"}</span>
                         </div>
                       </td>
                       <td>
-                        <div className={styles.amount}>
-                          ${Number(employee.salary || 0).toFixed(2)}
+                        <div className={styles.stack}>
+                          <span>{employee.personalEmail || "Email pendiente"}</span>
+                          <span>{employee.phone || "Contacto pendiente"}</span>
                         </div>
                       </td>
                       <td>
-                        <div className={styles.structureStack}>
-                          <span className={styles.branchBadge}>
-                            <Landmark size={14} />
-                            {employee.branch}
-                          </span>
-                          <span className={styles.roleBadge}>
-                            <BriefcaseBusiness size={14} />
-                            {employee.roleName || "Rol pendiente"}
-                          </span>
-                        </div>
+                        <span className={styles.badge}>
+                          <Landmark size={14} />
+                          {employee.branchName || employee.branch || "Pendiente"}
+                        </span>
                       </td>
                       <td>
-                        <div className={styles.identityBlock}>
-                          <span className={styles.identityLabel}>Código biométrico</span>
-                          <span className={styles.identityValue}>
-                            {employee.biometricCode || "s/n"}
-                          </span>
-                        </div>
+                        <span className={styles.badgeMuted}>
+                          <BriefcaseBusiness size={14} />
+                          {employee.roleName || "Pendiente"}
+                        </span>
                       </td>
-                        <td>
-                          <div className={styles.rowActions}>
+                      <td className={styles.amount}>${Number(employee.salary || 0).toFixed(2)}</td>
+                      <td>{employee.birthDate || "Pendiente"}</td>
+                      <td>{employee.biometricCode || "s/n"}</td>
+                      <td>
+                        <span className={`catalog-status-badge ${employee.isActive ? "is-active" : "is-inactive"}`}>
+                          {employee.isActive ? "Activo" : "Inactivo"}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="catalog-row-actions">
                           <Link
                             href={`${planningModulePath("/payroll")}?employeeId=${employee.id}&employeeName=${encodeURIComponent(employee.fullName)}&mode=month`}
-                            className={styles.miniLink}
+                            className="catalog-icon-button"
                             aria-label={`Ver nómina de ${employee.fullName}`}
                             title="Ir a nómina"
+                            onDoubleClick={(event) => event.stopPropagation()}
                           >
                             <ReceiptText size={16} />
                           </Link>
                           <button
                             type="button"
                             onClick={() => handleEdit(employee)}
-                            className={styles.miniButton}
+                            onDoubleClick={(event) => event.stopPropagation()}
+                            className="catalog-icon-button"
                             aria-label={`Editar ${employee.fullName}`}
                             title="Editar empleado"
                           >
@@ -546,7 +464,8 @@ export default function EmployeeManagement() {
                           <button
                             type="button"
                             onClick={() => requestDelete(employee)}
-                            className={styles.miniDanger}
+                            onDoubleClick={(event) => event.stopPropagation()}
+                            className="catalog-icon-button danger"
                             aria-label={`Eliminar ${employee.fullName}`}
                             title="Eliminar empleado"
                           >
@@ -561,14 +480,51 @@ export default function EmployeeManagement() {
             </div>
           </div>
         ) : (
-          <div className={styles.empty}>
+          <div className="catalog-empty-state">
             {sortedEmployees.length
               ? "No encontramos empleados con ese criterio de búsqueda."
-              : "Todavía no hay empleados registrados. Usa el formulario para crear el primero."}
+              : "Todavía no hay empleados registrados. Crea el primero desde el formulario."}
           </div>
         )}
       </section>
-      </div>
-    </>
+
+      <CatalogDrawer
+        isOpen={isDrawerOpen}
+        eyebrow={editingEmployeeId ? "Modo edición" : "Nuevo registro"}
+        title={editingEmployeeId ? "Editar empleado" : "Formulario de empleado"}
+        onClose={closeDrawer}
+      >
+        <EmployeeForm
+          form={form}
+          branches={branches}
+          roles={roles}
+          isEditing={Boolean(editingEmployeeId)}
+          isSaving={isPending}
+          canSubmit={canSubmit}
+          onCancel={closeDrawer}
+          onFieldChange={updateField}
+          onBranchChange={handleBranchChange}
+          onRoleChange={handleRoleChange}
+          onSubmit={handleSubmit}
+        />
+      </CatalogDrawer>
+
+      <EmployeeDetailModal
+        employee={selectedEmployee}
+        onClose={() => setSelectedEmployee(null)}
+        onEdit={handleEdit}
+        onDelete={requestDelete}
+      />
+
+      <ConfirmDialog
+        isOpen={Boolean(employeeToDelete)}
+        title="Eliminar empleado"
+        message={`¿Deseas eliminar a "${employeeToDelete?.fullName || ""}"? Esta acción no se puede deshacer.`}
+        confirmLabel={isPending ? "Eliminando..." : "Eliminar"}
+        isPending={isPending}
+        onCancel={() => setEmployeeToDelete(null)}
+        onConfirm={confirmDelete}
+      />
+    </div>
   );
 }

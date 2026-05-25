@@ -2,8 +2,24 @@ import { NextResponse } from "next/server";
 
 import { isAuthenticated } from "@/lib/auth";
 import connectToDatabase from "@/lib/db/mongodb";
-import { normalizeEmployeePayload, serializeEmployee } from "@/lib/employees";
-import Employee from "@/models/Employee";
+import {
+  DEFAULT_USER_TYPES,
+  normalizeUserTypePayload,
+  serializeUserType,
+} from "@/lib/user-types";
+import UserType from "@/models/UserType";
+
+async function ensureDefaultUserTypes() {
+  await Promise.all(
+    DEFAULT_USER_TYPES.map((userType) =>
+      UserType.updateOne(
+        { code: userType.code },
+        { $setOnInsert: userType },
+        { upsert: true },
+      ),
+    ),
+  );
+}
 
 export async function GET() {
   const authenticated = await isAuthenticated();
@@ -13,13 +29,12 @@ export async function GET() {
   }
 
   await connectToDatabase();
+  await ensureDefaultUserTypes();
 
-  const employees = await Employee.find({})
-    .sort({ fullName: 1 })
-    .lean();
+  const userTypes = await UserType.find({}).sort({ name: 1 }).lean();
 
   return NextResponse.json({
-    employees: employees.map(serializeEmployee),
+    userTypes: userTypes.map(serializeUserType),
   });
 }
 
@@ -32,29 +47,29 @@ export async function POST(request) {
 
   try {
     await connectToDatabase();
-    const body = await request.json();
-    const payload = normalizeEmployeePayload(body);
 
-    const employee = await Employee.create(payload);
+    const body = await request.json();
+    const payload = normalizeUserTypePayload(body);
+    const userType = await UserType.create(payload);
 
     return NextResponse.json(
       {
-        employee: serializeEmployee(employee),
+        userType: serializeUserType(userType),
       },
       { status: 201 },
     );
   } catch (error) {
     if (error?.code === 11000) {
       const field = Object.keys(error.keyPattern || {})[0];
-      const message = field === "dni"
-        ? "Ya existe un empleado con ese DNI."
-        : "El código biométrico ya está asignado a otro empleado.";
+      const message = field === "name"
+        ? "Ya existe un tipo de usuario con ese nombre."
+        : "Ya existe un tipo de usuario con ese código.";
 
       return NextResponse.json({ error: message }, { status: 409 });
     }
 
     return NextResponse.json(
-      { error: error.message || "No se pudo crear el empleado." },
+      { error: error.message || "No se pudo crear el tipo de usuario." },
       { status: 400 },
     );
   }

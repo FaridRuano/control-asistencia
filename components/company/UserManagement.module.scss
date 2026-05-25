@@ -1,0 +1,60 @@
+.fullWidthBody {
+  @media (min-width: 1280px) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.userIdentity,
+.employeeStack {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.username {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  border-radius: 999px;
+  background: rgba(31, 111, 255, 0.09);
+  color: #15418f;
+  padding: 0.36rem 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.email,
+.employeeDni,
+.lastLogin {
+  color: #4d6487;
+  font-size: 0.88rem;
+}
+
+.employeeName {
+  color: #10213e;
+}
+
+.roleBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  width: fit-content;
+  border-radius: 999px;
+  background: #f3f6fb;
+  color: #29456f;
+  padding: 0.42rem 0.7rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.masterBadge {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: rgba(255, 213, 74, 0.22);
+  color: #715200;
+  padding: 0.34rem 0.62rem;
+  font-size: 0.76rem;
+  font-weight: 800;
+}

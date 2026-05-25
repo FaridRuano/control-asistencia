@@ -33,10 +33,9 @@ export async function PATCH(request, context) {
   } catch (error) {
     if (error?.code === 11000) {
       const field = Object.keys(error.keyPattern || {})[0];
-      const message =
-        field === "fullName"
-          ? "Ya existe un empleado con ese nombre completo."
-          : "El código biométrico ya está asignado a otro empleado.";
+      const message = field === "dni"
+        ? "Ya existe un empleado con ese DNI."
+        : "El código biométrico ya está asignado a otro empleado.";
 
       return NextResponse.json({ error: message }, { status: 409 });
     }

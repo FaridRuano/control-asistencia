@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
 import {
-  createSessionToken,
   getSessionCookieOptions,
   SESSION_COOKIE_NAME,
   validateCredentials,
@@ -14,7 +13,9 @@ export async function POST(request) {
     const username = String(body?.username || "").trim();
     const password = String(body?.password || "");
 
-    if (!validateCredentials(username, password)) {
+    const session = await validateCredentials(username, password);
+
+    if (!session) {
       return NextResponse.json(
         { error: "Usuario o clave incorrectos." },
         { status: 401 },
@@ -24,7 +25,7 @@ export async function POST(request) {
     const cookieStore = await cookies();
     cookieStore.set(
       SESSION_COOKIE_NAME,
-      createSessionToken(),
+      session.token,
       getSessionCookieOptions(),
     );
 

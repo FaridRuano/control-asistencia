@@ -1,0 +1,184 @@
+"use client";
+
+import { Plus } from "lucide-react";
+
+import styles from "./EmployeeForm.module.scss";
+
+const DOCUMENT_TYPES = [
+  { value: "cedula", label: "Cédula" },
+  { value: "pasaporte", label: "Pasaporte" },
+  { value: "ruc", label: "RUC" },
+];
+
+export default function EmployeeForm({
+  form,
+  branches,
+  roles,
+  isEditing,
+  isSaving,
+  canSubmit,
+  onCancel,
+  onFieldChange,
+  onBranchChange,
+  onRoleChange,
+  onSubmit,
+}) {
+  return (
+    <form onSubmit={onSubmit} className={`catalog-form-grid ${styles.formGrid}`}>
+      <label className="catalog-field">
+        <span className="catalog-label">Documento de identidad</span>
+        <select
+          value={form.documentType}
+          onChange={(event) => onFieldChange("documentType", event.target.value)}
+          className="catalog-select"
+        >
+          {DOCUMENT_TYPES.map((documentType) => (
+            <option key={documentType.value} value={documentType.value}>
+              {documentType.label}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="catalog-field">
+        <span className="catalog-label">DNI</span>
+        <input
+          value={form.dni}
+          onChange={(event) => onFieldChange("dni", event.target.value)}
+          className="catalog-input"
+          placeholder="Número de documento"
+        />
+      </label>
+
+      <label className="catalog-field">
+        <span className="catalog-label">Nombre completo</span>
+        <input
+          value={form.fullName}
+          onChange={(event) => onFieldChange("fullName", event.target.value)}
+          className="catalog-input"
+          placeholder="Ej. María Fernanda Pérez"
+          required
+        />
+      </label>
+
+      <label className="catalog-field">
+        <span className="catalog-label">Email personal</span>
+        <input
+          type="email"
+          value={form.personalEmail}
+          onChange={(event) => onFieldChange("personalEmail", event.target.value)}
+          className="catalog-input"
+          placeholder="correo@dominio.com"
+        />
+      </label>
+
+      <label className="catalog-field">
+        <span className="catalog-label">Dirección</span>
+        <input
+          value={form.address}
+          onChange={(event) => onFieldChange("address", event.target.value)}
+          className="catalog-input"
+          placeholder="Dirección domiciliaria"
+        />
+      </label>
+
+      <label className="catalog-field">
+        <span className="catalog-label">Número de contacto</span>
+        <input
+          value={form.phone}
+          onChange={(event) => onFieldChange("phone", event.target.value)}
+          className="catalog-input"
+          placeholder="Teléfono o celular"
+        />
+      </label>
+
+      <label className="catalog-field">
+        <span className="catalog-label">Sucursal</span>
+        <select
+          value={form.branchId}
+          onChange={(event) => onBranchChange(event.target.value)}
+          className="catalog-select"
+        >
+          <option value="">Selecciona una sucursal</option>
+          {branches.map((branch) => (
+            <option key={branch.id} value={branch.id}>
+              {branch.name}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="catalog-field">
+        <span className="catalog-label">Rol</span>
+        <select
+          value={form.roleCode}
+          onChange={(event) => onRoleChange(event.target.value)}
+          className="catalog-select"
+        >
+          <option value="">Selecciona un rol</option>
+          {roles.map((role) => (
+            <option key={role.id} value={role.code}>
+              {role.name}{role.areaName ? ` · ${role.areaName}` : ""}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="catalog-field">
+        <span className="catalog-label">Sueldo</span>
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          value={form.salary}
+          onChange={(event) => onFieldChange("salary", event.target.value)}
+          className="catalog-input"
+          placeholder="0.00"
+        />
+      </label>
+
+      <label className="catalog-field">
+        <span className="catalog-label">Fecha de nacimiento</span>
+        <input
+          type="date"
+          value={form.birthDate}
+          onChange={(event) => onFieldChange("birthDate", event.target.value)}
+          className="catalog-input"
+        />
+      </label>
+
+      <label className="catalog-field">
+        <span className="catalog-label">Biométrico</span>
+        <input
+          value={form.biometricCode}
+          onChange={(event) => onFieldChange("biometricCode", event.target.value)}
+          className="catalog-input"
+          placeholder="Código del biométrico"
+        />
+      </label>
+
+      <label className={`catalog-field ${styles.statusField}`}>
+        <span className="catalog-label">Estado</span>
+        <button
+          type="button"
+          className={`catalog-switch ${form.isActive ? "is-active" : ""}`}
+          onClick={() => onFieldChange("isActive", !form.isActive)}
+          aria-pressed={form.isActive}
+        >
+          <span className="catalog-switchKnob" />
+          <span>{form.isActive ? "Activo" : "Inactivo"}</span>
+        </button>
+      </label>
+
+      <div className={`catalog-actions catalog-actions-end ${styles.actions}`}>
+        <button type="button" onClick={onCancel} disabled={isSaving} className="catalog-button-ghost">
+          Cancelar
+        </button>
+        <button type="submit" disabled={isSaving || !canSubmit} className="catalog-button-primary">
+          <Plus size={16} />
+          {isSaving ? "Guardando..." : isEditing ? "Actualizar" : "Crear"}
+        </button>
+      </div>
+    </form>
+  );
+}

@@ -1,21 +1,22 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   BriefcaseBusiness,
   Building2,
   Edit3,
-  EyeOff,
   Plus,
   Search,
   ShieldUser,
   Trash2,
 } from "lucide-react";
 
+import CatalogDrawer from "@/components/catalog/CatalogDrawer";
 import CatalogPageLoader from "@/components/catalog/CatalogPageLoader";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import FloatingNotice from "@/components/ui/FloatingNotice";
 import HydrationGate from "@/components/ui/HydrationGate";
-import usePersistentBooleanPreference from "@/hooks/usePersistentBooleanPreference";
+import RoleForm from "./RoleForm";
 import styles from "./RoleManagement.module.scss";
 
 const INITIAL_FORM = {
@@ -25,8 +26,6 @@ const INITIAL_FORM = {
   description: "",
   isActive: true,
 };
-
-const ROLE_FORM_VISIBILITY_PREFERENCE_KEY = "company.roles.formVisible";
 
 function mapRoleToForm(role) {
   return {
@@ -44,16 +43,14 @@ export default function RoleManagement() {
   const [form, setForm] = useState(INITIAL_FORM);
   const [search, setSearch] = useState("");
   const [editingRoleId, setEditingRoleId] = useState("");
+  const [roleToDelete, setRoleToDelete] = useState(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isLoadingRoles, setIsLoadingRoles] = useState(true);
   const [notice, setNotice] = useState(null);
   const [isSaving, startSavingTransition] = useTransition();
   const [, startLoadingTransition] = useTransition();
   const noticeExitTimeoutRef = useRef(null);
   const noticeRemoveTimeoutRef = useRef(null);
-  const [isFormVisible, setIsFormVisible] = usePersistentBooleanPreference(
-    ROLE_FORM_VISIBILITY_PREFERENCE_KEY,
-    true,
-  );
 
   function clearNoticeTimers() {
     if (noticeExitTimeoutRef.current) {
@@ -213,8 +210,18 @@ export default function RoleManagement() {
   function resetForm() {
     setEditingRoleId("");
     setForm(INITIAL_FORM);
-    setIsFormVisible(true);
   }
+
+  function openCreateDrawer() {
+    resetForm();
+    setIsDrawerOpen(true);
+  }
+
+  const closeDrawer = useCallback(() => {
+    setIsDrawerOpen(false);
+    setEditingRoleId("");
+    setForm(INITIAL_FORM);
+  }, []);
 
   function handleSubmit(event) {
     event.preventDefault();
@@ -243,7 +250,7 @@ export default function RoleManagement() {
             ? "Rol actualizado correctamente."
             : "Rol creado correctamente.",
         );
-        resetForm();
+        closeDrawer();
       } catch (requestError) {
         showNotice("error", requestError.message);
       }
@@ -253,19 +260,21 @@ export default function RoleManagement() {
   function handleEdit(role) {
     setEditingRoleId(role.id);
     setForm(mapRoleToForm(role));
-    setIsFormVisible(true);
+    setIsDrawerOpen(true);
   }
 
-  function handleDelete(role) {
-    const confirmed = window.confirm(`¿Deseas eliminar el rol "${role.name}"?`);
+  function requestDelete(role) {
+    setRoleToDelete(role);
+  }
 
-    if (!confirmed) {
+  function confirmDelete() {
+    if (!roleToDelete) {
       return;
     }
 
     startSavingTransition(async () => {
       try {
-        const response = await fetch(`/api/roles/${role.id}`, {
+        const response = await fetch(`/api/roles/${roleToDelete.id}`, {
           method: "DELETE",
         });
         const payload = await response.json();
@@ -277,9 +286,11 @@ export default function RoleManagement() {
         await refreshData();
         showNotice("success", "Rol eliminado correctamente.");
 
-        if (editingRoleId === role.id) {
-          resetForm();
+        if (editingRoleId === roleToDelete.id) {
+          closeDrawer();
         }
+
+        setRoleToDelete(null);
       } catch (requestError) {
         showNotice("error", requestError.message);
       }
@@ -289,107 +300,12 @@ export default function RoleManagement() {
   return (
     <HydrationGate fallback={null}>
       {isLoadingRoles ? (
-        <CatalogPageLoader formVisible={isFormVisible} />
+        <CatalogPageLoader formVisible={false} />
       ) : (
         <div className="catalog-page-shell">
           <FloatingNotice notice={notice} onClose={dismissNotice} />
 
-          <div className="catalog-page-body">
-            <div className="catalog-form-rail">
-              <div className={`catalog-form-column ${!isFormVisible ? "is-hidden" : ""}`}>
-                <section className={`catalog-panel page-entrance ${styles.formPanel}`}>
-                  <div className="catalog-panel-shell">
-                    <div className="catalog-section-head">
-                      <div className={styles.formHeading}>
-                        <p className={`catalog-section-eyebrow ${styles.formEyebrow}`}>
-                          {editingRoleId ? "Modo edición" : "Nuevo registro"}
-                        </p>
-                        <h3 className={`catalog-section-title ${styles.formTitle}`}>
-                          {editingRoleId ? "Editar rol" : "Formulario de rol"}
-                        </h3>
-                      </div>
-                    </div>
-
-                    <div className="catalog-panel-body">
-                      <form onSubmit={handleSubmit} className={`catalog-form-grid ${styles.formGrid}`}>
-                        <label className="catalog-field">
-                          <span className="catalog-label">Código</span>
-                          <input
-                            value={form.code}
-                            onChange={(event) => updateField("code", event.target.value.toUpperCase())}
-                            className="catalog-input"
-                            placeholder="Se genera automáticamente si lo dejas vacío"
-                          />
-                        </label>
-
-                        <label className="catalog-field">
-                          <span className="catalog-label">Área</span>
-                          <select
-                            value={form.areaCode}
-                            onChange={(event) => updateField("areaCode", event.target.value)}
-                            className="catalog-select"
-                            required
-                          >
-                            <option value="">Selecciona un área</option>
-                            {areas.map((area) => (
-                              <option key={area.id} value={area.code}>
-                                {area.name}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-
-                        <label className="catalog-field">
-                          <span className="catalog-label">Nombre</span>
-                          <input
-                            value={form.name}
-                            onChange={(event) => updateField("name", event.target.value)}
-                            className="catalog-input"
-                            placeholder="Ej. Jefe de ventas"
-                            required
-                          />
-                        </label>
-
-                        <label className="catalog-field">
-                          <span className="catalog-label">Descripción</span>
-                          <textarea
-                            value={form.description}
-                            onChange={(event) => updateField("description", event.target.value)}
-                            className="catalog-input"
-                            placeholder="Ej. Responsable de coordinar equipo, cobertura y cumplimiento operativo."
-                            rows={4}
-                          />
-                        </label>
-
-                        <label className={`catalog-field ${styles.toggleField}`}>
-                          <span className="catalog-label">Estado</span>
-                          <button
-                            type="button"
-                            className={`catalog-toggle ${form.isActive ? "is-active" : ""}`}
-                            onClick={() => updateField("isActive", !form.isActive)}
-                            aria-pressed={form.isActive}
-                          >
-                            <span>{form.isActive ? "Activo" : "Inactivo"}</span>
-                          </button>
-                        </label>
-
-                        <div className="catalog-actions">
-                          <button type="submit" disabled={isSaving || !canSubmit} className="catalog-button-primary">
-                            <Plus size={16} />
-                            {isSaving ? "Guardando..." : editingRoleId ? "Actualizar" : "Crear"}
-                          </button>
-
-                          <button type="button" onClick={resetForm} disabled={isSaving} className="catalog-button-ghost">
-                            Limpiar
-                          </button>
-                        </div>
-                      </form>
-                    </div>
-                  </div>
-                </section>
-              </div>
-            </div>
-
+          <div className={`catalog-page-body ${styles.fullWidthBody}`}>
             <div className="catalog-table-column">
               <section className="catalog-panel page-entrance page-entrance-delay-sm">
                 <div className="catalog-toolbar">
@@ -413,13 +329,15 @@ export default function RoleManagement() {
 
                   <button
                     type="button"
-                    className={isFormVisible ? "catalog-button-ghost" : "catalog-button-primary"}
-                    onClick={() => setIsFormVisible(!isFormVisible)}
-                    aria-expanded={isFormVisible}
-                    aria-label={isFormVisible ? "Ocultar formulario" : "Crear rol"}
-                    title={isFormVisible ? "Ocultar formulario" : "Crear rol"}
+                    className="catalog-button-primary"
+                    onClick={openCreateDrawer}
+                    aria-haspopup="dialog"
+                    aria-expanded={isDrawerOpen}
+                    aria-label="Crear rol"
+                    title="Crear rol"
                   >
-                    {isFormVisible ? <EyeOff size={16} /> : <Plus size={16} />}
+                    <Plus size={16} />
+                    Crear
                   </button>
                 </div>
 
@@ -480,7 +398,7 @@ export default function RoleManagement() {
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => handleDelete(role)}
+                                    onClick={() => requestDelete(role)}
                                     className="catalog-icon-button danger"
                                     title="Eliminar rol"
                                     aria-label={`Eliminar ${role.name}`}
@@ -503,6 +421,33 @@ export default function RoleManagement() {
               </section>
             </div>
           </div>
+
+          <CatalogDrawer
+            isOpen={isDrawerOpen}
+            eyebrow={editingRoleId ? "Modo edición" : "Nuevo registro"}
+            title={editingRoleId ? "Editar rol" : "Formulario de rol"}
+            onClose={closeDrawer}
+          >
+            <RoleForm
+              areas={areas}
+              form={form}
+              isEditing={Boolean(editingRoleId)}
+              isSaving={isSaving}
+              canSubmit={canSubmit}
+              onFieldChange={updateField}
+              onCancel={closeDrawer}
+              onSubmit={handleSubmit}
+            />
+          </CatalogDrawer>
+          <ConfirmDialog
+            isOpen={Boolean(roleToDelete)}
+            title="Eliminar rol"
+            message={`¿Deseas eliminar el rol "${roleToDelete?.name || ""}"? Esta acción no se puede deshacer.`}
+            confirmLabel={isSaving ? "Eliminando..." : "Eliminar"}
+            isPending={isSaving}
+            onCancel={() => setRoleToDelete(null)}
+            onConfirm={confirmDelete}
+          />
         </div>
       )}
     </HydrationGate>

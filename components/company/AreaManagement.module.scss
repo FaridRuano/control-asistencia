@@ -1,24 +1,7 @@
-.formPanel {
-  position: relative;
-}
-
-.formHeading {
-  min-height: 3.4rem;
-  display: grid;
-  align-content: start;
-}
-
-.formGrid {
-  margin-top: 0.35rem;
-}
-
-.formEyebrow,
-.formTitle {
-  white-space: nowrap;
-}
-
-.toggleField {
-  align-self: end;
+.fullWidthBody {
+  @media (min-width: 1280px) {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .areaIdentity {

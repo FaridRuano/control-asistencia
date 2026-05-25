@@ -1,6 +1,6 @@
 .page {
   width: min(1720px, calc(100% - 0.25rem));
-  height: calc(100vh - 10px);
+  height: calc(100dvh - 10px);
   margin: 0 auto;
   padding: 5px 0;
   display: grid;
@@ -8,8 +8,18 @@
   overflow: hidden;
 
   @media (min-width: 1080px) {
-    grid-template-columns: 270px minmax(0, 1fr);
+    grid-template-columns: 300px minmax(0, 1fr);
   }
+}
+
+.mobileMenuButton,
+.mobileCloseButton,
+.mobileBrandBar {
+  display: none;
+}
+
+.mobileNavBackdrop {
+  display: none;
 }
 
 .sidebar {
@@ -24,15 +34,136 @@
   min-height: 0;
   height: 100%;
   overflow: hidden;
+
+  @media (max-width: 1079px) {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    width: 100%;
+    height: 100dvh;
+    border-radius: 0;
+    border: 0;
+    padding: 1rem;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(245, 248, 254, 0.99));
+    transform: translateX(-100%);
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      transform 240ms cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 180ms ease;
+  }
+}
+
+.sidebarOpen {
+  @media (max-width: 1079px) {
+    transform: translateX(0);
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+.mobileMenuButton {
+  @media (max-width: 1079px) {
+    position: fixed;
+    top: max(0.85rem, env(safe-area-inset-top));
+    left: max(0.85rem, env(safe-area-inset-left));
+    z-index: 70;
+    width: 2.75rem;
+    height: 2.75rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(16, 33, 62, 0.12);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.94);
+    color: #143f8f;
+    box-shadow: 0 16px 34px rgba(16, 33, 62, 0.16);
+    backdrop-filter: blur(10px);
+    cursor: pointer;
+    transition:
+      transform 160ms ease,
+      background 160ms ease,
+      border-color 160ms ease;
+
+    &:hover {
+      transform: translateY(-1px);
+      border-color: rgba(31, 111, 255, 0.22);
+      background: #ffffff;
+    }
+  }
+}
+
+.mobileBrandBar {
+  @media (max-width: 1079px) {
+    position: fixed;
+    top: max(0.85rem, env(safe-area-inset-top));
+    left: 50%;
+    z-index: 65;
+    width: min(132px, 34vw);
+    height: 2.75rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(16, 33, 62, 0.1);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.94);
+    box-shadow: 0 16px 34px rgba(16, 33, 62, 0.14);
+    backdrop-filter: blur(10px);
+    pointer-events: none;
+    transform: translateX(-50%);
+  }
+}
+
+.mobileBrandLogo {
+  width: 46px;
+  height: auto;
+}
+
+.mobileNavBackdrop {
+  @media (max-width: 1079px) {
+    position: fixed;
+    inset: 0;
+    z-index: 75;
+    display: block;
+    background: rgba(255, 255, 255, 0.58);
+    backdrop-filter: blur(6px);
+    animation: mobile-backdrop-in 180ms ease both;
+  }
+}
+
+.mobileCloseButton {
+  @media (max-width: 1079px) {
+    position: absolute;
+    top: max(1rem, env(safe-area-inset-top));
+    right: max(1rem, env(safe-area-inset-right));
+    width: 2.5rem;
+    height: 2.5rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(16, 33, 62, 0.1);
+    border-radius: 999px;
+    background: #ffffff;
+    color: #29456f;
+    box-shadow: 0 12px 28px rgba(16, 33, 62, 0.12);
+    cursor: pointer;
+  }
 }
 
 .sidebarMain {
   min-height: 0;
   overflow: auto;
-  padding: 0.25rem 0.25rem 0.75rem;
+  padding: 0.25rem 0.45rem 0.75rem 0.25rem;
   display: grid;
   gap: 1.15rem;
   align-content: start;
+
+  @media (max-width: 1079px) {
+    position: relative;
+    padding: calc(4.15rem + env(safe-area-inset-top)) 0.2rem 1rem;
+    gap: 1rem;
+  }
 }
 
 .brand {
@@ -42,9 +173,9 @@
 }
 
 .logoWrap {
-  width: 62px;
+  width: 112px;
   height: 62px;
-  border-radius: 1.25rem;
+  border-radius: 1.1rem;
   display: grid;
   place-items: center;
   background: #ffffff;
@@ -53,7 +184,7 @@
 }
 
 .logo {
-  width: 42px;
+  width: 86px;
   height: auto;
 }
 
@@ -346,9 +477,13 @@
 }
 
 .sidebarFooter {
-  padding: 1rem 0.25rem 0.25rem;
+  padding: 1rem 0.45rem 0.25rem 0.25rem;
   border-top: 1px solid rgba(16, 33, 62, 0.08);
   background: linear-gradient(180deg, rgba(245, 248, 254, 0), rgba(245, 248, 254, 0.98) 24%);
+
+  @media (max-width: 1079px) {
+    padding: 0.9rem 0.2rem calc(0.2rem + env(safe-area-inset-bottom));
+  }
 }
 
 .content {
@@ -358,9 +493,14 @@
   box-shadow: var(--shadow-panel);
   padding: 0.95rem;
   backdrop-filter: blur(12px);
+  min-width: 0;
   min-height: 0;
   height: 100%;
   overflow: auto;
+
+  @media (max-width: 1079px) {
+    padding: 4.2rem 0.95rem 0.95rem;
+  }
 }
 
 .header {
@@ -388,4 +528,14 @@
   max-width: 52rem;
   color: var(--text-muted);
   line-height: 1.8;
+}
+
+@keyframes mobile-backdrop-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }

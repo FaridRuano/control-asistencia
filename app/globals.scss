@@ -61,6 +61,8 @@ img {
 }
 
 .catalog-page-shell {
+  width: 100%;
+  min-width: 0;
   display: grid;
   gap: 1.2rem;
 }
@@ -85,6 +87,8 @@ img {
 }
 
 .catalog-page-body {
+  width: 100%;
+  min-width: 0;
   display: grid;
   gap: 1.2rem;
 
@@ -102,6 +106,8 @@ img {
 }
 
 .catalog-panel {
+  width: 100%;
+  min-width: 0;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius-panel);
   background: rgba(255, 255, 255, 0.95);
@@ -188,6 +194,7 @@ img {
 }
 
 .catalog-table-column {
+  width: 100%;
   min-width: 0;
 }
 
@@ -282,10 +289,76 @@ img {
   }
 }
 
+.catalog-switch {
+  width: fit-content;
+  min-width: 142px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  border: 1px solid rgba(16, 33, 62, 0.12);
+  border-radius: 999px;
+  background: #f3f6fb;
+  color: #536986;
+  padding: 0.42rem 0.78rem 0.42rem 0.45rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease,
+    color 160ms ease;
+
+  &:hover {
+    transform: translateY(-1px);
+    border-color: rgba(31, 111, 255, 0.2);
+  }
+
+  &.is-active {
+    border-color: rgba(31, 111, 255, 0.24);
+    background: #eef5ff;
+    color: #17428c;
+  }
+}
+
+.catalog-switchKnob {
+  width: 2.15rem;
+  height: 1.24rem;
+  position: relative;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #c7d3e4;
+  transition: background 160ms ease;
+
+  &::after {
+    content: "";
+    position: absolute;
+    top: 0.17rem;
+    left: 0.18rem;
+    width: 0.9rem;
+    height: 0.9rem;
+    border-radius: 999px;
+    background: #ffffff;
+    box-shadow: 0 3px 8px rgba(16, 33, 62, 0.18);
+    transition: transform 160ms ease;
+  }
+}
+
+.catalog-switch.is-active .catalog-switchKnob {
+  background: var(--primary);
+
+  &::after {
+    transform: translateX(0.88rem);
+  }
+}
+
 .catalog-actions {
   display: flex;
   gap: 0.7rem;
   flex-wrap: wrap;
+}
+
+.catalog-actions-end {
+  justify-content: flex-end;
 }
 
 .catalog-button-primary,
@@ -378,6 +451,9 @@ img {
 }
 
 .catalog-table-shell {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   border-radius: var(--radius-panel);
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -386,6 +462,9 @@ img {
 }
 
 .catalog-table-scroll {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
 }
 
@@ -479,6 +558,11 @@ img {
     border-color: rgba(217, 45, 32, 0.18);
     background: var(--danger-soft);
     color: var(--danger);
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
   }
 }
 
