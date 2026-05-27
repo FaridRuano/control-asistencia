@@ -66,14 +66,50 @@ function calculatePresenceMinutes(row) {
   return Math.max(end - start - (Number(row.lunchDurationMinutes) || 0), 0);
 }
 
-function calculatePlannedNetMinutes(row, baseDailyMinutes) {
+function calculatePlannedNetMinutes(row, baseDailyMinutes, presenceMinutes = null) {
   const authorizedExtraMinutes = Number(row.authorizedExtraMinutes) || 0;
 
   if (row.dayType === "weekend_overtime") {
-    return authorizedExtraMinutes;
+    return presenceMinutes ?? authorizedExtraMinutes;
   }
 
-  return Math.max(baseDailyMinutes + authorizedExtraMinutes, 0);
+  const authorizedNetMinutes = Math.max(baseDailyMinutes + authorizedExtraMinutes, 0);
+
+  if (presenceMinutes === null) {
+    return authorizedNetMinutes;
+  }
+
+  return Math.min(authorizedNetMinutes, presenceMinutes);
+}
+
+function getNetBreakdown(row, baseDailyMinutes, presenceMinutes = null) {
+  const authorizedExtraMinutes = Number(row.authorizedExtraMinutes) || 0;
+
+  if (row.dayType === "weekend_overtime") {
+    const extraordinaryMinutes = calculatePlannedNetMinutes(row, baseDailyMinutes, presenceMinutes);
+
+    return {
+      totalMinutes: extraordinaryMinutes,
+      normalMinutes: 0,
+      supplementaryMinutes: 0,
+      extraordinaryMinutes,
+      label: `${minutesLabel(extraordinaryMinutes)} ext`,
+    };
+  }
+
+  const coveredNetMinutes = calculatePlannedNetMinutes(row, baseDailyMinutes, presenceMinutes);
+  const normalMinutes = Math.min(baseDailyMinutes, coveredNetMinutes);
+  const supplementaryMinutes = Math.max(coveredNetMinutes - normalMinutes, 0);
+
+  return {
+    totalMinutes: coveredNetMinutes,
+    normalMinutes,
+    supplementaryMinutes,
+    extraordinaryMinutes: 0,
+    label: supplementaryMinutes
+      ? `${minutesLabel(normalMinutes)} + ${minutesLabel(supplementaryMinutes)} sup`
+      : minutesLabel(normalMinutes),
+  };
 }
 
 function buildFormSignature(form) {
@@ -132,6 +168,7 @@ export default function BaseSchedulesManager() {
     let restDays = 0;
     let netMinutes = 0;
     let supplementaryMinutes = 0;
+    let extraordinaryMinutes = 0;
     let extraordinaryDays = 0;
     const warnings = [];
 
@@ -156,25 +193,29 @@ export default function BaseSchedulesManager() {
         return;
       }
 
-      const dayNetMinutes = calculatePlannedNetMinutes(row, baseDailyMinutes);
-      netMinutes += dayNetMinutes;
+      const breakdown = getNetBreakdown(row, baseDailyMinutes, presenceMinutes);
+      netMinutes += breakdown.totalMinutes;
+      extraordinaryMinutes += breakdown.extraordinaryMinutes;
 
       if (row.dayType === "workday") {
-        const daySupplementary = Number(row.authorizedExtraMinutes) || 0;
-        supplementaryMinutes += daySupplementary;
+        supplementaryMinutes += breakdown.supplementaryMinutes;
 
-        if (daySupplementary > dailySupplementaryLimit) {
+        if (breakdown.supplementaryMinutes > dailySupplementaryLimit) {
           warnings.push(`${row.label}: supera la suplementaria diaria permitida.`);
         }
       }
 
-      if (dayNetMinutes > presenceMinutes) {
-        warnings.push(`${row.label}: la presencia no cubre el neto autorizado.`);
+      const authorizedNetMinutes = row.dayType === "workday"
+        ? baseDailyMinutes + (Number(row.authorizedExtraMinutes) || 0)
+        : breakdown.totalMinutes;
+
+      if (authorizedNetMinutes > presenceMinutes) {
+        warnings.push(`${row.label}: el extra autorizado supera la presencia del turno.`);
       }
     });
 
-    if (restDays < MANDATORY_WEEKLY_REST_DAYS) {
-      warnings.push("La semana no cumple los descansos obligatorios.");
+    if (restDays < MANDATORY_WEEKLY_REST_DAYS && extraordinaryDays === 0) {
+      warnings.push("La semana tiene menos de dos descansos; marca el dia adicional como extraordinario.");
     }
 
     if (supplementaryMinutes > weeklySupplementaryLimit) {
@@ -190,6 +231,7 @@ export default function BaseSchedulesManager() {
       restDays,
       netMinutes,
       supplementaryMinutes,
+      extraordinaryMinutes,
       extraordinaryDays,
       warnings,
       isValid: warnings.length === 0,
@@ -557,6 +599,7 @@ export default function BaseSchedulesManager() {
                 <strong>{validation.isValid ? "Cumple reglas base" : "Revisar reglas base"}</strong>
                 <span>
                   {minutesLabel(validation.netMinutes)} netas, {minutesLabel(validation.supplementaryMinutes)} suplementarias, {validation.restDays} descansos.
+                  {validation.extraordinaryMinutes ? ` ${minutesLabel(validation.extraordinaryMinutes)} extraordinarias.` : ""}
                 </span>
               </div>
             </div>
@@ -581,8 +624,8 @@ export default function BaseSchedulesManager() {
                 <th>Tipo</th>
                 <th>Entrada</th>
                 <th>Almuerzo</th>
-                <th>Salida</th>
                 <th>Extra autorizado</th>
+                <th>Salida</th>
                 <th>Neto</th>
               </tr>
             </thead>
@@ -591,9 +634,9 @@ export default function BaseSchedulesManager() {
                 const type = DAY_TYPES.find((item) => item.value === row.dayType);
                 const disabled = !type?.isWorkingDay;
                 const baseDailyMinutes = (Number(rules.dailyBaseHours) || 8) * 60;
-                const netMinutes = disabled ? null : calculatePlannedNetMinutes(row, baseDailyMinutes);
                 const presenceMinutes = disabled ? null : calculatePresenceMinutes(row);
-                const isShortPresence = netMinutes !== null && presenceMinutes !== null && netMinutes > presenceMinutes;
+                const netBreakdown = disabled ? null : getNetBreakdown(row, baseDailyMinutes, presenceMinutes);
+                const isShortPresence = netBreakdown !== null && presenceMinutes !== null && netBreakdown.totalMinutes > presenceMinutes;
 
                 return (
                   <tr key={row.dayOfWeek}>
@@ -605,9 +648,13 @@ export default function BaseSchedulesManager() {
                     </td>
                     <td><input type="time" value={row.startTime} disabled={!canEditScheduleRows || disabled} onChange={(event) => updateRow(row.dayOfWeek, { startTime: event.target.value })} /></td>
                     <td><input className={styles.compactNumberInput} type="number" min="0" disabled={!canEditScheduleRows || disabled} value={row.lunchDurationMinutes} onChange={(event) => updateRow(row.dayOfWeek, { lunchDurationMinutes: event.target.value })} /></td>
-                    <td><input type="time" value={row.endTime} disabled={!canEditScheduleRows || disabled} onChange={(event) => updateRow(row.dayOfWeek, { endTime: event.target.value })} /></td>
                     <td><input className={styles.compactNumberInput} type="number" min="0" disabled={!canEditScheduleRows || disabled} value={row.authorizedExtraMinutes} onChange={(event) => updateRow(row.dayOfWeek, { authorizedExtraMinutes: event.target.value })} /></td>
-                    <td><span className={`${styles.netTag} ${isShortPresence ? styles.netTagWarn : ""}`}>{netMinutes === null ? "--" : minutesLabel(netMinutes)}</span></td>
+                    <td><input type="time" value={row.endTime} disabled={!canEditScheduleRows || disabled} onChange={(event) => updateRow(row.dayOfWeek, { endTime: event.target.value })} /></td>
+                    <td>
+                      <span className={`${styles.netTag} ${isShortPresence ? styles.netTagWarn : ""}`}>
+                        {netBreakdown === null ? "--" : netBreakdown.label}
+                      </span>
+                    </td>
                   </tr>
                 );
               })}

@@ -1,34 +1,17 @@
 import DashboardShell from "@/components/dashboard/DashboardShell";
-import ModuleScaffold from "@/components/dashboard/ModuleScaffold";
+import SchedulePlanner from "@/components/planning/SchedulePlanner";
 
 export const metadata = {
-  title: "Plan mensual | Control de Asistencia",
+  title: "Programacion de horarios | Control de Asistencia",
 };
 
 export default function PlanningMonthlyPage() {
   return (
     <DashboardShell
-      title="Plan mensual"
-      description="Espacio reservado para el generador del horario óptimo del mes."
+      title="Programacion de horarios"
+      description="Asigna plantillas por empleado, sucursal y mes; el sistema calcula los dias reales del periodo y sus semanas parciales."
     >
-      <ModuleScaffold
-        eyebrow="Planificación"
-        title="Generación mensual"
-        description="Esta página concentrará el motor que calculará el plan mensual por sucursal, área y rol, considerando feriados, días laborables, descansos obligatorios, presupuesto y reglas de extras."
-        sections={[
-          {
-            title: "Reglas que deberá considerar",
-            description: "Resumen de los criterios más relevantes ya identificados.",
-            bullets: [
-              "Días laborables por mes según feriados.",
-              "Dos días de descanso obligatorios por semana.",
-              "Cobertura por área, rol y sucursal.",
-              "Presupuesto mensual y costo estimado por empleado.",
-              "Horas suplementarias y extraordinarias con autorización.",
-            ],
-          },
-        ]}
-      />
+      <SchedulePlanner />
     </DashboardShell>
   );
 }

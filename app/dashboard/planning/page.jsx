@@ -3,28 +3,28 @@ import ModuleScaffold from "@/components/dashboard/ModuleScaffold";
 import { planningModulePath } from "@/lib/modules/planning/routes";
 
 export const metadata = {
-  title: "Planificación | Control de Asistencia",
+  title: "Planificacion | Control de Asistencia",
 };
 
 export default function PlanningPage() {
   return (
     <DashboardShell
-      title="Planificación"
-      description="Módulo destinado a construir el horario óptimo del mes, bajar el plan a semanas y gestionar cambios antes de contrastarlo con la operación real."
+      title="Planificacion"
+      description="Gestiona la programacion de horarios, asignaciones por empleado, excepciones y vacaciones antes de contrastar contra la operacion real."
     >
       <ModuleScaffold
-        eyebrow="Planificación"
-        title="Arquitectura funcional del planificador"
-        description="Aquí vivirá la lógica principal del sistema: cálculo de días laborables, cobertura por rol, restricciones por feriados, descansos obligatorios, presupuesto y ajustes operativos."
+        eyebrow="Planificacion"
+        title="Programacion operativa"
+        description="El flujo principal parte de las plantillas de horario y las asigna a empleados por sucursal y mes. Luego se revisan semanas parciales, ajustes, vacaciones y excepciones."
         sections={[
           {
-            title: "Plan mensual",
-            description: "Generación del horario base del mes según sucursal, área, rol, presupuesto y reglas laborales.",
+            title: "Programacion de horarios",
+            description: "Asignacion mensual por empleado usando plantillas base, sucursal, rol y feriados registrados.",
             href: planningModulePath("/planning/monthly"),
           },
           {
-            title: "Plan semanal",
-            description: "Aterriza el plan mensual para seguimiento y pequeños ajustes de continuidad.",
+            title: "Revision operativa",
+            description: "Lectura semanal del plan para validar continuidad, descansos, backups y dias extraordinarios.",
             href: planningModulePath("/planning/weekly"),
           },
           {
@@ -34,18 +34,17 @@ export default function PlanningPage() {
           },
           {
             title: "Vacaciones programadas",
-            description: "Vacaciones solicitadas con anticipación antes de generar la planificación.",
+            description: "Vacaciones solicitadas con anticipacion antes de generar la planificacion.",
             href: planningModulePath("/planning/time-off"),
           },
         ]}
         legacyLinks={[
           {
-            href: planningModulePath("/schedules"),
-            label: "Horarios semanales actuales",
-            description: "Base existente de configuración manual por empleado.",
+            href: planningModulePath("/settings/base-schedules"),
+            label: "Plantillas de horarios",
+            description: "Configurar horarios base por area y rol.",
           },
         ]}
-        futureNote="La implementación real del optimizador mensual debe construirse después de definir bien las reglas configurables y las entidades del negocio."
       />
     </DashboardShell>
   );

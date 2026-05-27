@@ -1,0 +1,154 @@
+import mongoose, { Schema } from "mongoose";
+
+const generatedDaySchema = new Schema(
+  {
+    dateKey: {
+      type: String,
+      trim: true,
+      required: true,
+    },
+    dayOfWeek: {
+      type: Number,
+      min: 0,
+      max: 6,
+      required: true,
+    },
+    label: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    dayType: {
+      type: String,
+      enum: ["workday", "vacation", "holiday", "weekend_overtime", "off_day"],
+      default: "workday",
+    },
+    startTime: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    lunchDurationMinutes: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    endTime: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    authorizedExtraMinutes: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    source: {
+      type: String,
+      enum: ["template", "holiday"],
+      default: "template",
+    },
+  },
+  { _id: false },
+);
+
+const scheduleAssignmentSchema = new Schema(
+  {
+    monthKey: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    employee: {
+      type: Schema.Types.ObjectId,
+      ref: "Employee",
+      required: true,
+    },
+    employeeName: {
+      type: String,
+      required: true,
+      trim: true,
+      uppercase: true,
+    },
+    employeeDni: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    branchCode: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      default: "",
+    },
+    branchName: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      default: "",
+    },
+    areaCode: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    areaName: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      default: "",
+    },
+    roleCode: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    roleName: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      default: "",
+    },
+    template: {
+      type: Schema.Types.ObjectId,
+      ref: "BaseScheduleTemplate",
+      required: true,
+    },
+    templateName: {
+      type: String,
+      required: true,
+      trim: true,
+      uppercase: true,
+    },
+    rotationGroup: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    generatedDays: {
+      type: [generatedDaySchema],
+      default: [],
+    },
+    notes: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+  },
+  {
+    timestamps: true,
+  },
+);
+
+scheduleAssignmentSchema.index({ monthKey: 1, employee: 1 }, { unique: true });
+scheduleAssignmentSchema.index({ monthKey: 1, branchCode: 1 });
+
+if (process.env.NODE_ENV !== "production" && mongoose.models.ScheduleAssignment) {
+  delete mongoose.models.ScheduleAssignment;
+}
+
+const ScheduleAssignment =
+  mongoose.models.ScheduleAssignment ||
+  mongoose.model("ScheduleAssignment", scheduleAssignmentSchema);
+
+export default ScheduleAssignment;

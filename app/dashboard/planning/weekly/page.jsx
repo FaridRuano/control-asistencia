@@ -3,24 +3,30 @@ import ModuleScaffold from "@/components/dashboard/ModuleScaffold";
 import { planningModulePath } from "@/lib/modules/planning/routes";
 
 export const metadata = {
-  title: "Plan semanal | Control de Asistencia",
+  title: "Revision operativa | Control de Asistencia",
 };
 
 export default function PlanningWeeklyPage() {
   return (
     <DashboardShell
-      title="Plan semanal"
-      description="Página base para consolidar la visualización y edición de la semana operativa."
+      title="Revision operativa"
+      description="Vista para revisar la programacion ya asignada por semanas, especialmente cuando el mes inicia o termina a mitad de semana."
     >
       <ModuleScaffold
-        eyebrow="Planificación"
-        title="Desglose semanal del plan"
-        description="Aquí luego podremos aterrizar el plan mensual a una semana específica, revisar rotaciones, backups y continuidad de horarios por rol."
+        eyebrow="Programacion"
+        title="Revision semanal de horarios"
+        description="La asignacion principal vive en Programacion de horarios. Esta vista quedara como el tablero de lectura por semana para validar continuidad, backups, descansos y dias extraordinarios."
+        sections={[
+          {
+            title: "Siguiente paso",
+            description: "Usar las asignaciones mensuales guardadas para mostrar cada semana real del mes y permitir ajustes puntuales.",
+          },
+        ]}
         legacyLinks={[
           {
-            href: planningModulePath("/schedules"),
-            label: "Base actual de horarios",
-            description: "Configuración semanal manual existente.",
+            href: planningModulePath("/planning/monthly"),
+            label: "Ir a programacion de horarios",
+            description: "Asignar plantillas por empleado, sucursal y mes.",
           },
         ]}
       />
