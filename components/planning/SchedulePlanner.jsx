@@ -131,26 +131,6 @@ export default function SchedulePlanner() {
     }, 4000);
   }, [clearNoticeTimers, dismissNotice]);
 
-  const loadAssignments = useCallback(async () => {
-    const params = new URLSearchParams({ month: monthKey });
-
-    if (branchCode) {
-      params.set("branchCode", branchCode);
-    }
-
-    const response = await fetch(`/api/planning/schedule-assignments?${params.toString()}`);
-    const payload = await response.json();
-
-    if (!response.ok) {
-      throw new Error(payload.error || "No se pudieron cargar las asignaciones.");
-    }
-
-    setAssignments(payload.assignments || []);
-    setDraftTemplates(
-      Object.fromEntries((payload.assignments || []).map((assignment) => [assignment.employeeId, assignment.templateId])),
-    );
-  }, [branchCode, monthKey]);
-
   useEffect(() => {
     let isCancelled = false;
 
@@ -208,8 +188,42 @@ export default function SchedulePlanner() {
       return;
     }
 
-    loadAssignments().catch((error) => showNotice("error", error.message));
-  }, [isLoading, loadAssignments, showNotice]);
+    let isCancelled = false;
+
+    async function loadAssignments() {
+      try {
+        const params = new URLSearchParams({ month: monthKey });
+
+        if (branchCode) {
+          params.set("branchCode", branchCode);
+        }
+
+        const response = await fetch(`/api/planning/schedule-assignments?${params.toString()}`);
+        const payload = await response.json();
+
+        if (!response.ok) {
+          throw new Error(payload.error || "No se pudieron cargar las asignaciones.");
+        }
+
+        if (!isCancelled) {
+          setAssignments(payload.assignments || []);
+          setDraftTemplates(
+            Object.fromEntries((payload.assignments || []).map((assignment) => [assignment.employeeId, assignment.templateId])),
+          );
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          showNotice("error", error.message);
+        }
+      }
+    }
+
+    loadAssignments();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [branchCode, isLoading, monthKey, showNotice]);
 
   function assignTemplate(employeeId, templateId) {
     setDraftTemplates((current) => ({ ...current, [employeeId]: templateId }));
