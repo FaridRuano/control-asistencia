@@ -4,10 +4,52 @@
   }
 }
 
+.tablePanel,
+.tableShell {
+  width: 100%;
+  max-width: 100%;
+}
+
+.table {
+  width: 100%;
+  min-width: 1040px;
+  table-layout: fixed;
+
+  th,
+  td {
+    overflow: hidden;
+  }
+}
+
+.userColumn {
+  width: 24%;
+}
+
+.employeeColumn {
+  width: 25%;
+}
+
+.roleColumn {
+  width: 17%;
+}
+
+.statusColumn {
+  width: 8rem;
+}
+
+.lastAccessColumn {
+  width: 11rem;
+}
+
+.actionsColumn {
+  width: 7.25rem;
+}
+
 .userIdentity,
 .employeeStack {
   display: grid;
   gap: 0.45rem;
+  min-width: 0;
 }
 
 .username {
@@ -19,7 +61,7 @@
   background: rgba(31, 111, 255, 0.09);
   color: #15418f;
   padding: 0.36rem 0.7rem;
-  font-size: 0.78rem;
+  font-size: var(--font-size-xs);
   font-weight: 700;
 }
 
@@ -27,11 +69,13 @@
 .employeeDni,
 .lastLogin {
   color: #4d6487;
-  font-size: 0.88rem;
+  font-size: var(--font-size-base);
+  overflow-wrap: anywhere;
 }
 
 .employeeName {
   color: #10213e;
+  overflow-wrap: anywhere;
 }
 
 .roleBadge {
@@ -43,7 +87,7 @@
   background: #f3f6fb;
   color: #29456f;
   padding: 0.42rem 0.7rem;
-  font-size: 0.82rem;
+  font-size: var(--font-size-sm);
   font-weight: 700;
 }
 
@@ -55,6 +99,36 @@
   background: rgba(255, 213, 74, 0.22);
   color: #715200;
   padding: 0.34rem 0.62rem;
-  font-size: 0.76rem;
+  font-size: var(--font-size-xs);
   font-weight: 800;
+}
+
+@media (max-width: 760px) {
+  .table {
+    min-width: 820px;
+  }
+
+  .userColumn {
+    width: 28%;
+  }
+
+  .employeeColumn {
+    width: 27%;
+  }
+
+  .roleColumn {
+    width: 16%;
+  }
+
+  .statusColumn {
+    width: 7rem;
+  }
+
+  .lastAccessColumn {
+    width: 9rem;
+  }
+
+  .actionsColumn {
+    width: 6.2rem;
+  }
 }

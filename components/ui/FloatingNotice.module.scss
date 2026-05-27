@@ -38,7 +38,7 @@
 
 .toastTitle {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: var(--font-size-base);
   font-weight: 700;
   color: #11408b;
 }
@@ -46,7 +46,7 @@
 .toastMessage {
   margin: 0.2rem 0 0;
   color: #3f5e92;
-  font-size: 0.88rem;
+  font-size: var(--font-size-base);
   line-height: 1.5;
 }
 

@@ -59,7 +59,7 @@
 
 .toastTitle {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: var(--font-size-base);
   font-weight: 700;
   color: #12315d;
 }
@@ -67,7 +67,7 @@
 .toastMessage {
   margin: 0.2rem 0 0;
   color: #4e648c;
-  font-size: 0.88rem;
+  font-size: var(--font-size-base);
   line-height: 1.5;
 }
 
@@ -112,7 +112,7 @@
 }
 
 .label {
-  font-size: 0.9rem;
+  font-size: var(--font-size-base);
   font-weight: 700;
   color: #1c315d;
 }
@@ -207,7 +207,7 @@
 
 .autocompleteMeta,
 .autocompleteEmpty {
-  font-size: 0.88rem;
+  font-size: var(--font-size-base);
   color: #6880a7;
 }
 
@@ -232,7 +232,7 @@
   background: #f3f7ff;
   color: #5b6f95;
   padding: 0.55rem 0.95rem;
-  font-size: 0.95rem;
+  font-size: var(--font-size-lg);
 }
 
 .submit {
@@ -369,13 +369,13 @@
 
 .toolbarTitle {
   color: #18315b;
-  font-size: 0.95rem;
+  font-size: var(--font-size-lg);
   font-weight: 800;
 }
 
 .toolbarText {
   color: #6c7ea0;
-  font-size: 0.86rem;
+  font-size: var(--font-size-sm);
 }
 
 .secondaryAction {
@@ -530,7 +530,7 @@
   padding: 0.2rem 0.65rem;
   background: #fbfcfe;
   color: #5d7194;
-  font-size: 0.8rem;
+  font-size: var(--font-size-xs);
   font-weight: 600;
 
   strong {
@@ -545,7 +545,7 @@
   min-height: 1.9rem;
   border-radius: 999px;
   padding: 0.2rem 0.65rem;
-  font-size: 0.83rem;
+  font-size: var(--font-size-sm);
   font-weight: 700;
 }
 
@@ -562,7 +562,7 @@
 
 .emptyInline {
   color: #7688aa;
-  font-size: 0.9rem;
+  font-size: var(--font-size-base);
 }
 
 .hoursCell {
@@ -620,7 +620,7 @@
   padding: 0.2rem 0.65rem;
   background: #fff3cd;
   color: #8a6211;
-  font-size: 0.83rem;
+  font-size: var(--font-size-sm);
   font-weight: 700;
 }
 
@@ -631,7 +631,7 @@
 
 .lateState {
   color: #8a6211;
-  font-size: 0.78rem;
+  font-size: var(--font-size-xs);
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -659,7 +659,7 @@
   padding: 0.7rem 0.85rem;
   background: #eef4ff;
   color: #1b4ba0;
-  font-size: 0.84rem;
+  font-size: var(--font-size-sm);
   font-weight: 800;
 }
 
@@ -682,7 +682,7 @@
 
 .overtimeHint {
   color: #6c7ea0;
-  font-size: 0.85rem;
+  font-size: var(--font-size-sm);
   line-height: 1.45;
 }
 

@@ -17,6 +17,18 @@ $shadow-panel: 0 24px 70px rgba(15, 23, 42, 0.1);
 $shadow-soft: 0 18px 45px rgba(15, 23, 42, 0.08);
 $radius-panel: 2rem;
 $radius-card: 1.5rem;
+$font-size-micro: 0.72rem;
+$font-size-xs: 0.78rem;
+$font-size-sm: 0.84rem;
+$font-size-base: 0.9rem;
+$font-size-lg: 0.95rem;
+$font-size-title-xs: 1.05rem;
+$font-size-title-sm: 1.12rem;
+$font-size-title-md: 1.22rem;
+$font-size-title-lg: 1.35rem;
+$font-size-title-xl: clamp(1.55rem, 2vw, 2.15rem);
+$font-size-hero: clamp(2rem, 3vw, 3rem);
+$font-size-display: clamp(2.7rem, 5vw, 5.2rem);
 
 :root {
   --background: #{$color-background};
@@ -38,4 +50,16 @@ $radius-card: 1.5rem;
   --shadow-soft: #{$shadow-soft};
   --radius-panel: #{$radius-panel};
   --radius-card: #{$radius-card};
+  --font-size-micro: #{$font-size-micro};
+  --font-size-xs: #{$font-size-xs};
+  --font-size-sm: #{$font-size-sm};
+  --font-size-base: #{$font-size-base};
+  --font-size-lg: #{$font-size-lg};
+  --font-size-title-xs: #{$font-size-title-xs};
+  --font-size-title-sm: #{$font-size-title-sm};
+  --font-size-title-md: #{$font-size-title-md};
+  --font-size-title-lg: #{$font-size-title-lg};
+  --font-size-title-xl: #{$font-size-title-xl};
+  --font-size-hero: #{$font-size-hero};
+  --font-size-display: #{$font-size-display};
 }

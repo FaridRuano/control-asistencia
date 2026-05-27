@@ -33,8 +33,8 @@ export default function PlanningPage() {
             href: planningModulePath("/planning/exceptions"),
           },
           {
-            title: "Vacaciones y permisos",
-            description: "Ausencias programadas y permisos que alteran la planificación del período.",
+            title: "Vacaciones programadas",
+            description: "Vacaciones solicitadas con anticipación antes de generar la planificación.",
             href: planningModulePath("/planning/time-off"),
           },
         ]}

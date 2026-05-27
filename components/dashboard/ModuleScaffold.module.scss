@@ -16,7 +16,7 @@
 .eyebrow,
 .sectionEyebrow {
   margin: 0;
-  font-size: 0.72rem;
+  font-size: var(--font-size-micro);
   letter-spacing: 0.24em;
   text-transform: uppercase;
   color: var(--primary);
@@ -24,7 +24,7 @@
 
 .title {
   margin: 0.55rem 0 0;
-  font-size: clamp(1.5rem, 2vw, 2.15rem);
+  font-size: var(--font-size-title-xl);
   line-height: 1.08;
   color: #10213e;
 }
@@ -59,7 +59,7 @@
 
 .highlightLabel {
   display: block;
-  font-size: 0.8rem;
+  font-size: var(--font-size-xs);
   text-transform: uppercase;
   letter-spacing: 0.14em;
   color: #6a7ea2;
@@ -68,13 +68,13 @@
 .highlightValue {
   display: block;
   margin-top: 0.65rem;
-  font-size: 1.08rem;
+  font-size: var(--font-size-title-xs);
   color: #16325f;
 }
 
 .sectionTitle {
   margin: 0.5rem 0 0;
-  font-size: 1.1rem;
+  font-size: var(--font-size-title-sm);
   color: #16325f;
 }
 
@@ -132,7 +132,7 @@
 
 .legacyDescription {
   color: #4c6790;
-  font-size: 0.92rem;
+  font-size: var(--font-size-base);
 }
 
 .futureNote {

@@ -1,5 +1,5 @@
 import DashboardShell from "@/components/dashboard/DashboardShell";
-import ModuleScaffold from "@/components/dashboard/ModuleScaffold";
+import LaborRulesManager from "@/components/planning/LaborRulesManager";
 
 export const metadata = {
   title: "Reglas laborales | Control de Asistencia",
@@ -9,13 +9,9 @@ export default function SettingsLaborRulesPage() {
   return (
     <DashboardShell
       title="Reglas laborales"
-      description="Página base para parámetros de jornada, descansos y recargos."
+      description="Parametros de jornada, descansos, recargos y feriados para el modulo operativo."
     >
-      <ModuleScaffold
-        eyebrow="Configuración"
-        title="Parámetros laborales"
-        description="Aquí luego podremos configurar horas semanales, días de descanso, horas suplementarias por día, reglas de feriado y criterios de pago."
-      />
+      <LaborRulesManager />
     </DashboardShell>
   );
 }

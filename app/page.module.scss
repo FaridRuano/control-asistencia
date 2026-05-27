@@ -55,7 +55,7 @@
 
 .eyebrow {
   margin: 0;
-  font-size: 0.72rem;
+  font-size: var(--font-size-micro);
   letter-spacing: 0.32em;
   text-transform: uppercase;
   color: var(--primary);
@@ -63,7 +63,7 @@
 
 .brandName {
   margin: 0.35rem 0 0;
-  font-size: 1.1rem;
+  font-size: var(--font-size-title-sm);
   font-weight: 700;
   color: var(--text);
 }
@@ -71,7 +71,7 @@
 .title {
   margin: 1.45rem 0 0;
   max-width: 12ch;
-  font-size: clamp(2.7rem, 5vw, 5.2rem);
+  font-size: var(--font-size-display);
   line-height: 0.96;
   letter-spacing: -0.05em;
 }
@@ -79,7 +79,7 @@
 .description {
   margin: 1.15rem 0 0;
   max-width: 38rem;
-  font-size: 1.02rem;
+  font-size: var(--font-size-lg);
   line-height: 1.85;
   color: var(--text-muted);
 }

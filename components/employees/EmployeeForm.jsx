@@ -5,7 +5,7 @@ import { Plus } from "lucide-react";
 import styles from "./EmployeeForm.module.scss";
 
 const DOCUMENT_TYPES = [
-  { value: "cedula", label: "Cédula" },
+  { value: "cedula", label: "Cedula" },
   { value: "pasaporte", label: "Pasaporte" },
   { value: "ruc", label: "RUC" },
 ];
@@ -23,6 +23,17 @@ export default function EmployeeForm({
   onRoleChange,
   onSubmit,
 }) {
+  const selectedRoleCodes = new Set((form.roleAssignments || []).map((role) => role.code));
+
+  function toggleRole(role) {
+    const currentCodes = (form.roleAssignments || []).map((assignment) => assignment.code);
+    const nextCodes = selectedRoleCodes.has(role.code)
+      ? currentCodes.filter((code) => code !== role.code)
+      : [...currentCodes, role.code];
+
+    onRoleChange(nextCodes);
+  }
+
   return (
     <form onSubmit={onSubmit} className={`catalog-form-grid ${styles.formGrid}`}>
       <label className="catalog-field">
@@ -46,7 +57,7 @@ export default function EmployeeForm({
           value={form.dni}
           onChange={(event) => onFieldChange("dni", event.target.value)}
           className="catalog-input"
-          placeholder="Número de documento"
+          placeholder="Numero de documento"
         />
       </label>
 
@@ -56,7 +67,7 @@ export default function EmployeeForm({
           value={form.fullName}
           onChange={(event) => onFieldChange("fullName", event.target.value)}
           className="catalog-input"
-          placeholder="Ej. María Fernanda Pérez"
+          placeholder="Ej. Maria Fernanda Perez"
           required
         />
       </label>
@@ -73,22 +84,22 @@ export default function EmployeeForm({
       </label>
 
       <label className="catalog-field">
-        <span className="catalog-label">Dirección</span>
+        <span className="catalog-label">Direccion</span>
         <input
           value={form.address}
           onChange={(event) => onFieldChange("address", event.target.value)}
           className="catalog-input"
-          placeholder="Dirección domiciliaria"
+          placeholder="Direccion domiciliaria"
         />
       </label>
 
       <label className="catalog-field">
-        <span className="catalog-label">Número de contacto</span>
+        <span className="catalog-label">Numero de contacto</span>
         <input
           value={form.phone}
           onChange={(event) => onFieldChange("phone", event.target.value)}
           className="catalog-input"
-          placeholder="Teléfono o celular"
+          placeholder="Telefono o celular"
         />
       </label>
 
@@ -108,21 +119,30 @@ export default function EmployeeForm({
         </select>
       </label>
 
-      <label className="catalog-field">
-        <span className="catalog-label">Rol</span>
-        <select
-          value={form.roleCode}
-          onChange={(event) => onRoleChange(event.target.value)}
-          className="catalog-select"
-        >
-          <option value="">Selecciona un rol</option>
-          {roles.map((role) => (
-            <option key={role.id} value={role.code}>
-              {role.name}{role.areaName ? ` · ${role.areaName}` : ""}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="catalog-field">
+        <span className="catalog-label">Roles operativos</span>
+        <div className={styles.rolePicker}>
+          {roles.map((role) => {
+            const isSelected = selectedRoleCodes.has(role.code);
+
+            return (
+              <button
+                key={role.id}
+                type="button"
+                className={`${styles.roleOption} ${isSelected ? styles.roleOptionSelected : ""}`}
+                onClick={() => toggleRole(role)}
+                aria-pressed={isSelected}
+              >
+                <span>{role.name}</span>
+                <small>{role.areaName || "Sin area"}</small>
+              </button>
+            );
+          })}
+        </div>
+        {form.roleAssignments?.length ? (
+          <span className={styles.roleHint}>El primer rol seleccionado queda como rol principal para reportes actuales.</span>
+        ) : null}
+      </div>
 
       <label className="catalog-field">
         <span className="catalog-label">Sueldo</span>
@@ -148,12 +168,12 @@ export default function EmployeeForm({
       </label>
 
       <label className="catalog-field">
-        <span className="catalog-label">Biométrico</span>
+        <span className="catalog-label">Biometrico</span>
         <input
           value={form.biometricCode}
           onChange={(event) => onFieldChange("biometricCode", event.target.value)}
           className="catalog-input"
-          placeholder="Código del biométrico"
+          placeholder="Codigo del biometrico"
         />
       </label>
 

@@ -221,7 +221,7 @@ export default function UserTypeManagement() {
 
           <div className={`catalog-page-body ${styles.fullWidthBody}`}>
             <div className="catalog-table-column">
-              <section className="catalog-panel page-entrance page-entrance-delay-sm">
+              <section className={`catalog-panel page-entrance page-entrance-delay-sm ${styles.tablePanel}`}>
                 <div className="catalog-toolbar">
                   <p className="catalog-count">
                     {filteredTypes.length} rol{filteredTypes.length === 1 ? "" : "es"} de acceso
@@ -254,9 +254,15 @@ export default function UserTypeManagement() {
                 </div>
 
                 {filteredTypes.length ? (
-                  <div className="catalog-table-shell">
+                  <div className={`catalog-table-shell ${styles.tableShell}`}>
                     <div className="catalog-table-scroll">
-                      <table className="catalog-table">
+                      <table className={`catalog-table ${styles.table}`}>
+                        <colgroup>
+                          <col className={styles.typeColumn} />
+                          <col className={styles.descriptionColumn} />
+                          <col className={styles.statusColumn} />
+                          <col className={styles.actionsColumn} />
+                        </colgroup>
                         <thead>
                           <tr>
                             <th>Tipo</th>

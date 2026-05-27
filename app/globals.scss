@@ -18,7 +18,9 @@ body {
     radial-gradient(circle at top left, rgba(255, 213, 74, 0.2), transparent 22%),
     radial-gradient(circle at 88% 8%, rgba(31, 111, 255, 0.12), transparent 20%),
     linear-gradient(180deg, #f9fbff 0%, #edf3fb 52%, #f5f8fc 100%);
+  font-size: var(--font-size-base);
   font-family: var(--font-geist-sans), sans-serif;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -132,7 +134,7 @@ img {
   background: rgba(255, 255, 255, 0.94);
   color: #29456f;
   padding: 0.7rem 0.95rem;
-  font-size: 0.84rem;
+  font-size: var(--font-size-sm);
   font-weight: 700;
   cursor: pointer;
   transition:
@@ -205,7 +207,7 @@ img {
 
 .catalog-section-eyebrow {
   margin: 0;
-  font-size: 0.72rem;
+  font-size: var(--font-size-micro);
   letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--primary);
@@ -213,7 +215,7 @@ img {
 
 .catalog-section-title {
   margin: 0;
-  font-size: 1.34rem;
+  font-size: var(--font-size-title-lg);
   color: #10213e;
 }
 
@@ -235,7 +237,7 @@ img {
 }
 
 .catalog-label {
-  font-size: 0.9rem;
+  font-size: var(--font-size-base);
   font-weight: 700;
   color: #1c315d;
 }
@@ -300,7 +302,7 @@ img {
   background: #f3f6fb;
   color: #536986;
   padding: 0.42rem 0.78rem 0.42rem 0.45rem;
-  font-weight: 700;
+  font-weight: 500;
   cursor: pointer;
   transition:
     transform 160ms ease,
@@ -399,7 +401,7 @@ img {
   margin-top: 1rem;
   border-radius: 1rem;
   padding: 0.88rem 1rem;
-  font-size: 0.92rem;
+  font-size: var(--font-size-base);
 }
 
 .catalog-feedback-error {
@@ -426,7 +428,7 @@ img {
 .catalog-count {
   margin: 0;
   color: #4f6489;
-  font-size: 0.95rem;
+  font-size: var(--font-size-lg);
 }
 
 .catalog-search {
@@ -523,7 +525,7 @@ img {
   justify-content: center;
   border-radius: 999px;
   padding: 0.42rem 0.7rem;
-  font-size: 0.78rem;
+  font-size: var(--font-size-xs);
   font-weight: 700;
 
   &.is-active {

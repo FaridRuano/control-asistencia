@@ -30,7 +30,7 @@
 .eyebrow {
   margin: 0;
   color: var(--primary);
-  font-size: 0.72rem;
+  font-size: var(--font-size-micro);
   font-weight: 700;
   letter-spacing: 0.22em;
   text-transform: uppercase;
@@ -39,7 +39,7 @@
 .title {
   margin: 0.55rem 0 0;
   color: #10213e;
-  font-size: clamp(1.55rem, 2vw, 2.15rem);
+  font-size: var(--font-size-title-xl);
   line-height: 1.08;
 }
 
@@ -62,7 +62,7 @@
   background: #eef5ff;
   color: #17428c;
   padding: 0.62rem 0.85rem;
-  font-size: 0.86rem;
+  font-size: var(--font-size-sm);
   font-weight: 700;
 }
 
@@ -101,7 +101,7 @@
 .metricLabel {
   display: block;
   color: #6a7ea2;
-  font-size: 0.74rem;
+  font-size: var(--font-size-micro);
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -111,7 +111,7 @@
   display: block;
   margin-top: 0.35rem;
   color: #10213e;
-  font-size: clamp(1.25rem, 1.8vw, 1.75rem);
+  font-size: var(--font-size-title-lg);
   line-height: 1.05;
 }
 
@@ -140,7 +140,7 @@
 .panelTitle {
   margin: 0;
   color: #16325f;
-  font-size: 1.05rem;
+  font-size: var(--font-size-title-xs);
 }
 
 .qualityList {
@@ -160,7 +160,7 @@
   justify-content: space-between;
   gap: 0.8rem;
   color: #29456f;
-  font-size: 0.92rem;
+  font-size: var(--font-size-base);
 }
 
 .qualityHead strong {
@@ -182,7 +182,7 @@
 }
 
 .qualityItem p {
-  font-size: 0.86rem;
+  font-size: var(--font-size-sm);
 }
 
 .statusGrid {
@@ -213,12 +213,12 @@
 
 .statusCard strong {
   color: #10213e;
-  font-size: 1.2rem;
+  font-size: var(--font-size-title-md);
 }
 
 .statusCard span {
   color: #5f7394;
-  font-size: 0.88rem;
+  font-size: var(--font-size-base);
 }
 
 .quickLinks {
@@ -260,7 +260,7 @@
   background: #ffffff;
   color: #29456f;
   padding: 0.55rem 0.75rem;
-  font-size: 0.84rem;
+  font-size: var(--font-size-sm);
   font-weight: 700;
   text-decoration: none;
   transition:

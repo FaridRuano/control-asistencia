@@ -18,7 +18,7 @@
   background: rgba(31, 111, 255, 0.09);
   color: #15418f;
   padding: 0.36rem 0.7rem;
-  font-size: 0.78rem;
+  font-size: var(--font-size-xs);
   font-weight: 700;
 }
 
@@ -31,11 +31,11 @@
   align-items: center;
   gap: 0.42rem;
   color: #4d6487;
-  font-size: 0.9rem;
+  font-size: var(--font-size-base);
 }
 
 .roleDescription {
   color: #4d6487;
-  font-size: 0.9rem;
+  font-size: var(--font-size-base);
   line-height: 1.55;
 }

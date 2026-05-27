@@ -387,7 +387,7 @@ export default function UserManagement() {
 
           <div className={`catalog-page-body ${styles.fullWidthBody}`}>
             <div className="catalog-table-column">
-              <section className="catalog-panel page-entrance page-entrance-delay-sm">
+              <section className={`catalog-panel page-entrance page-entrance-delay-sm ${styles.tablePanel}`}>
                 <div className="catalog-toolbar">
                   <div>
                     <p className="catalog-count">
@@ -422,9 +422,17 @@ export default function UserManagement() {
                 </div>
 
                 {filteredUsers.length ? (
-                  <div className="catalog-table-shell">
+                  <div className={`catalog-table-shell ${styles.tableShell}`}>
                     <div className="catalog-table-scroll">
-                      <table className="catalog-table">
+                      <table className={`catalog-table ${styles.table}`}>
+                        <colgroup>
+                          <col className={styles.userColumn} />
+                          <col className={styles.employeeColumn} />
+                          <col className={styles.roleColumn} />
+                          <col className={styles.statusColumn} />
+                          <col className={styles.lastAccessColumn} />
+                          <col className={styles.actionsColumn} />
+                        </colgroup>
                         <thead>
                           <tr>
                             <th>Usuario</th>

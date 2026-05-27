@@ -22,6 +22,22 @@ import EmployeeDetailModal from "./EmployeeDetailModal";
 import EmployeeForm from "./EmployeeForm";
 import styles from "./EmployeeManagement.module.scss";
 
+const EMPLOYEES_PER_PAGE = 8;
+
+function getInitialEmployeeUrlState() {
+  if (typeof window === "undefined") {
+    return { search: "", page: 1 };
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const initialPage = Number(params.get("page") || 1);
+
+  return {
+    search: params.get("q") || "",
+    page: Number.isFinite(initialPage) && initialPage > 0 ? Math.floor(initialPage) : 1,
+  };
+}
+
 const INITIAL_FORM = {
   documentType: "cedula",
   dni: "",
@@ -36,6 +52,7 @@ const INITIAL_FORM = {
   roleName: "",
   areaCode: "",
   areaName: "",
+  roleAssignments: [],
   salary: "",
   birthDate: "",
   biometricCode: "",
@@ -50,6 +67,21 @@ function mapEmployeeToForm(employee, branches = [], roles = []) {
       .map((value) => String(value || "").toUpperCase())
       .includes(employeeBranch);
   });
+  const roleAssignments = (employee.roleAssignments || [])
+    .map((assignment) => {
+      const roleMatch = roles.find((candidate) => candidate.code === assignment.code);
+
+      return roleMatch
+        ? {
+            code: roleMatch.code,
+            name: roleMatch.name,
+            areaCode: roleMatch.areaCode,
+            areaName: roleMatch.areaName,
+            isPrimary: Boolean(assignment.isPrimary),
+          }
+        : assignment;
+    })
+    .filter((assignment) => assignment.code && assignment.name);
   const role = roles.find((candidate) => {
     const employeeRoleCode = String(employee.roleCode || "").toUpperCase();
     const employeeRoleName = String(employee.roleName || "").toUpperCase();
@@ -74,6 +106,17 @@ function mapEmployeeToForm(employee, branches = [], roles = []) {
     roleName: role?.name || employee.roleName || "",
     areaCode: role?.areaCode || employee.areaCode || "",
     areaName: role?.areaName || employee.areaName || "",
+    roleAssignments: roleAssignments.length
+      ? roleAssignments.map((assignment, index) => ({ ...assignment, isPrimary: index === 0 }))
+      : role
+        ? [{
+            code: role.code,
+            name: role.name,
+            areaCode: role.areaCode,
+            areaName: role.areaName,
+            isPrimary: true,
+          }]
+        : [],
     salary: String(employee.salary ?? ""),
     birthDate: employee.birthDate || "",
     biometricCode: employee.biometricCode || "",
@@ -93,6 +136,7 @@ function buildEmployeeSearchText(employee) {
     employee.branch,
     employee.roleName,
     employee.areaName,
+    ...(employee.roleAssignments || []).flatMap((role) => [role.name, role.areaName]),
     employee.biometricCode,
   ]
     .filter(Boolean)
@@ -101,11 +145,13 @@ function buildEmployeeSearchText(employee) {
 }
 
 export default function EmployeeManagement() {
+  const initialUrlState = useMemo(() => getInitialEmployeeUrlState(), []);
   const [employees, setEmployees] = useState([]);
   const [branches, setBranches] = useState([]);
   const [roles, setRoles] = useState([]);
   const [form, setForm] = useState(INITIAL_FORM);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialUrlState.search);
+  const [page, setPage] = useState(initialUrlState.page);
   const [editingEmployeeId, setEditingEmployeeId] = useState("");
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [employeeToDelete, setEmployeeToDelete] = useState(null);
@@ -148,6 +194,31 @@ export default function EmployeeManagement() {
       clearNoticeTimers();
     };
   }, [clearNoticeTimers]);
+
+  const replaceEmployeeUrlState = useCallback((nextSearch, nextPage) => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const cleanSearch = nextSearch.trim();
+    const cleanPage = Math.max(1, Math.floor(Number(nextPage) || 1));
+
+    if (cleanSearch) {
+      params.set("q", cleanSearch);
+    } else {
+      params.delete("q");
+    }
+
+    if (cleanPage > 1) {
+      params.set("page", String(cleanPage));
+    } else {
+      params.delete("page");
+    }
+
+    const queryString = params.toString();
+    window.history.replaceState(null, "", queryString ? `?${queryString}` : window.location.pathname);
+  }, []);
 
   async function loadData() {
     const [employeesResponse, branchesResponse, rolesResponse] = await Promise.all([
@@ -207,6 +278,14 @@ export default function EmployeeManagement() {
     );
   }, [search, sortedEmployees]);
 
+  const totalPages = Math.max(1, Math.ceil(filteredEmployees.length / EMPLOYEES_PER_PAGE));
+  const currentPage = Math.min(page, totalPages);
+  const paginationStart = (currentPage - 1) * EMPLOYEES_PER_PAGE;
+  const paginatedEmployees = filteredEmployees.slice(
+    paginationStart,
+    paginationStart + EMPLOYEES_PER_PAGE,
+  );
+
   const canSubmit = useMemo(() => Boolean(form.fullName.trim()), [form.fullName]);
 
   const closeDrawer = useCallback(() => {
@@ -222,6 +301,23 @@ export default function EmployeeManagement() {
     }));
   }
 
+  function handleSearchChange(value) {
+    setSearch(value);
+    setPage(1);
+    replaceEmployeeUrlState(value, 1);
+  }
+
+  function handlePageChange(nextPage) {
+    const cleanPage = Math.min(Math.max(1, nextPage), totalPages);
+
+    setPage(cleanPage);
+    replaceEmployeeUrlState(search, cleanPage);
+  }
+
+  function openEmployeeDetail(employee) {
+    setSelectedEmployee(employee);
+  }
+
   function handleBranchChange(branchId) {
     const branch = branches.find((candidate) => candidate.id === branchId);
 
@@ -233,15 +329,26 @@ export default function EmployeeManagement() {
     }));
   }
 
-  function handleRoleChange(roleCode) {
-    const role = roles.find((candidate) => candidate.code === roleCode);
+  function handleRoleChange(roleCodes) {
+    const selectedRoleCodes = Array.isArray(roleCodes) ? roleCodes : [roleCodes].filter(Boolean);
+    const selectedRoles = selectedRoleCodes
+      .map((roleCode) => roles.find((candidate) => candidate.code === roleCode))
+      .filter(Boolean);
+    const primaryRole = selectedRoles[0] || null;
 
     setForm((current) => ({
       ...current,
-      roleCode: role?.code || "",
-      roleName: role?.name || "",
-      areaCode: role?.areaCode || "",
-      areaName: role?.areaName || "",
+      roleCode: primaryRole?.code || "",
+      roleName: primaryRole?.name || "",
+      areaCode: primaryRole?.areaCode || "",
+      areaName: primaryRole?.areaName || "",
+      roleAssignments: selectedRoles.map((role, index) => ({
+        code: role.code,
+        name: role.name,
+        areaCode: role.areaCode,
+        areaName: role.areaName,
+        isPrimary: index === 0,
+      })),
     }));
   }
 
@@ -356,7 +463,7 @@ export default function EmployeeManagement() {
             <input
               type="search"
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) => handleSearchChange(event.target.value)}
               placeholder="Buscar empleado"
               className="catalog-search-input"
             />
@@ -377,30 +484,44 @@ export default function EmployeeManagement() {
         </div>
 
         {filteredEmployees.length ? (
-          <div className="catalog-table-shell">
-            <div className="catalog-table-scroll">
+          <div className={`catalog-table-shell ${styles.tableShell}`}>
+            <div className={`catalog-table-scroll ${styles.tableScroll}`}>
               <table className={`catalog-table ${styles.table}`}>
+                <colgroup>
+                  <col className={styles.statusColumn} />
+                  <col className={styles.employeeColumn} />
+                  <col className={styles.structureColumn} />
+                  <col className={styles.actionsColumn} />
+                </colgroup>
                 <thead>
                   <tr>
+                    <th aria-label="Estado" />
                     <th>Empleado</th>
-                    <th>Documento</th>
-                    <th>Contacto</th>
-                    <th>Sucursal</th>
-                    <th>Rol</th>
-                    <th>Sueldo</th>
-                    <th>Nacimiento</th>
-                    <th>Biométrico</th>
-                    <th>Estado</th>
+                    <th>Estructura</th>
                     <th>Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredEmployees.map((employee) => (
+                  {paginatedEmployees.map((employee) => (
                     <tr
                       key={employee.id}
                       className={styles.employeeRow}
-                      onDoubleClick={() => setSelectedEmployee(employee)}
+                      tabIndex={0}
+                      onClick={() => openEmployeeDetail(employee)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          openEmployeeDetail(employee);
+                        }
+                      }}
                     >
+                      <td>
+                        <span
+                          className={`${styles.statusMarker} ${employee.isActive ? styles.statusActive : styles.statusInactive}`}
+                          aria-label={employee.isActive ? "Empleado activo" : "Empleado inactivo"}
+                          title={employee.isActive ? "Activo" : "Inactivo"}
+                        />
+                      </td>
                       <td>
                         <div className={styles.employeeName}>{employee.fullName}</div>
                         <span className={styles.employeeMeta}>
@@ -410,51 +531,33 @@ export default function EmployeeManagement() {
                       </td>
                       <td>
                         <div className={styles.stack}>
-                          <strong>{employee.documentType || "cedula"}</strong>
-                          <span>{employee.dni || "DNI pendiente"}</span>
+                          <span className={styles.badge}>
+                            <Landmark size={14} />
+                            {employee.branchName || employee.branch || "Sucursal pendiente"}
+                          </span>
+                          <span className={styles.badgeMuted}>
+                            <BriefcaseBusiness size={14} />
+                            {employee.roleName || "Rol pendiente"}
+                          </span>
                         </div>
                       </td>
-                      <td>
-                        <div className={styles.stack}>
-                          <span>{employee.personalEmail || "Email pendiente"}</span>
-                          <span>{employee.phone || "Contacto pendiente"}</span>
-                        </div>
-                      </td>
-                      <td>
-                        <span className={styles.badge}>
-                          <Landmark size={14} />
-                          {employee.branchName || employee.branch || "Pendiente"}
-                        </span>
-                      </td>
-                      <td>
-                        <span className={styles.badgeMuted}>
-                          <BriefcaseBusiness size={14} />
-                          {employee.roleName || "Pendiente"}
-                        </span>
-                      </td>
-                      <td className={styles.amount}>${Number(employee.salary || 0).toFixed(2)}</td>
-                      <td>{employee.birthDate || "Pendiente"}</td>
-                      <td>{employee.biometricCode || "s/n"}</td>
-                      <td>
-                        <span className={`catalog-status-badge ${employee.isActive ? "is-active" : "is-inactive"}`}>
-                          {employee.isActive ? "Activo" : "Inactivo"}
-                        </span>
-                      </td>
-                      <td>
+                      <td className={styles.actionsCell}>
                         <div className="catalog-row-actions">
                           <Link
                             href={`${planningModulePath("/payroll")}?employeeId=${employee.id}&employeeName=${encodeURIComponent(employee.fullName)}&mode=month`}
                             className="catalog-icon-button"
                             aria-label={`Ver nómina de ${employee.fullName}`}
                             title="Ir a nómina"
-                            onDoubleClick={(event) => event.stopPropagation()}
+                            onClick={(event) => event.stopPropagation()}
                           >
                             <ReceiptText size={16} />
                           </Link>
                           <button
                             type="button"
-                            onClick={() => handleEdit(employee)}
-                            onDoubleClick={(event) => event.stopPropagation()}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleEdit(employee);
+                            }}
                             className="catalog-icon-button"
                             aria-label={`Editar ${employee.fullName}`}
                             title="Editar empleado"
@@ -463,8 +566,10 @@ export default function EmployeeManagement() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => requestDelete(employee)}
-                            onDoubleClick={(event) => event.stopPropagation()}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              requestDelete(employee);
+                            }}
                             className="catalog-icon-button danger"
                             aria-label={`Eliminar ${employee.fullName}`}
                             title="Eliminar empleado"
@@ -477,6 +582,33 @@ export default function EmployeeManagement() {
                   ))}
                 </tbody>
               </table>
+            </div>
+            <div className={styles.paginationBar}>
+              <span>
+                {paginationStart + 1}-{Math.min(paginationStart + EMPLOYEES_PER_PAGE, filteredEmployees.length)} de{" "}
+                {filteredEmployees.length}
+              </span>
+              <div className={styles.paginationActions}>
+                <button
+                  type="button"
+                  className="catalog-button-ghost"
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                >
+                  Anterior
+                </button>
+                <strong>
+                  {currentPage} / {totalPages}
+                </strong>
+                <button
+                  type="button"
+                  className="catalog-button-ghost"
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                >
+                  Siguiente
+                </button>
+              </div>
             </div>
           </div>
         ) : (

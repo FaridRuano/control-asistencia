@@ -34,7 +34,7 @@
 .blockingTitle {
   margin: 0;
   color: #10213e;
-  font-size: 1.2rem;
+  font-size: var(--font-size-title-md);
 }
 
 .blockingMessage {
@@ -92,7 +92,7 @@
 
 .toastTitle {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: var(--font-size-base);
   font-weight: 700;
   color: #12315d;
 }
@@ -100,7 +100,7 @@
 .toastMessage {
   margin: 0.2rem 0 0;
   color: #4e648c;
-  font-size: 0.88rem;
+  font-size: var(--font-size-base);
   line-height: 1.5;
 }
 
@@ -170,7 +170,7 @@
   color: #1550a0;
   padding: 0.7rem 0.95rem;
   font-weight: 700;
-  font-size: 0.9rem;
+  font-size: var(--font-size-base);
 }
 
 .sourceBadgeSecondary {
@@ -182,7 +182,7 @@
   color: #4e648c;
   padding: 0.65rem 0.9rem;
   font-weight: 700;
-  font-size: 0.86rem;
+  font-size: var(--font-size-sm);
 }
 
 .actionButtons {
@@ -269,7 +269,7 @@
 
 .summaryLabel {
   margin: 0;
-  font-size: 0.72rem;
+  font-size: var(--font-size-micro);
   letter-spacing: 0.22em;
   text-transform: uppercase;
   color: #6e80a4;
@@ -277,7 +277,7 @@
 
 .summaryValue {
   margin: 0.6rem 0 0;
-  font-size: 1.4rem;
+  font-size: var(--font-size-title-lg);
   font-weight: 700;
   color: #092250;
   word-break: break-word;
@@ -291,7 +291,7 @@
 .searchLabel {
   display: block;
   margin-bottom: 0.45rem;
-  font-size: 0.9rem;
+  font-size: var(--font-size-base);
   font-weight: 700;
   color: #1c315d;
 }
@@ -347,7 +347,7 @@
 .employeeMeta {
   margin: 0.25rem 0 0;
   color: var(--text-muted);
-  font-size: 0.88rem;
+  font-size: var(--font-size-base);
 }
 
 .employeeCount {
@@ -389,7 +389,7 @@
 
 .weekCount {
   color: #5e7295;
-  font-size: 0.86rem;
+  font-size: var(--font-size-sm);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -417,7 +417,7 @@
   }
 
   th {
-    font-size: 0.82rem;
+    font-size: var(--font-size-sm);
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
@@ -471,7 +471,7 @@
   padding: 0.35rem 0.65rem;
   border-radius: 999px;
   font-weight: 700;
-  font-size: 0.84rem;
+  font-size: var(--font-size-sm);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   box-sizing: border-box;
@@ -510,7 +510,7 @@
 .logsTitle {
   margin: 0;
   color: #6b5200;
-  font-size: 0.95rem;
+  font-size: var(--font-size-lg);
   font-weight: 700;
 }
 
@@ -518,7 +518,7 @@
   margin: 0.8rem 0 0;
   padding-left: 1.1rem;
   color: #83640a;
-  font-size: 0.9rem;
+  font-size: var(--font-size-base);
 }
 
 @keyframes spin {

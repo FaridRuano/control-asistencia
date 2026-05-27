@@ -51,7 +51,7 @@
 
 .eyebrow {
   margin: 0;
-  font-size: 0.72rem;
+  font-size: var(--font-size-micro);
   letter-spacing: 0.32em;
   text-transform: uppercase;
   color: var(--primary);
@@ -59,7 +59,7 @@
 
 .brandName {
   margin: 0.35rem 0 0;
-  font-size: 1.1rem;
+  font-size: var(--font-size-title-sm);
   font-weight: 700;
   color: var(--text);
 }
@@ -67,7 +67,7 @@
 .title {
   margin: 1.2rem 0 0;
   max-width: 14ch;
-  font-size: clamp(2.1rem, 3.6vw, 4rem);
+  font-size: var(--font-size-display);
   line-height: 0.96;
   letter-spacing: -0.05em;
 }
@@ -75,7 +75,7 @@
 .description {
   margin: 0.95rem 0 0;
   max-width: 44rem;
-  font-size: 0.98rem;
+  font-size: var(--font-size-lg);
   line-height: 1.8;
   color: var(--text-muted);
 }
@@ -175,7 +175,7 @@
   background: rgba(31, 111, 255, 0.12);
   color: #17428c;
   padding: 0.42rem 0.7rem;
-  font-size: 0.76rem;
+  font-size: var(--font-size-xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -183,7 +183,7 @@
 
 .cardTitle {
   margin: 0;
-  font-size: 1.3rem;
+  font-size: var(--font-size-title-lg);
   color: #10213e;
 }
 
@@ -210,7 +210,7 @@
   background: rgba(16, 33, 62, 0.05);
   color: #426184;
   padding: 0.45rem 0.72rem;
-  font-size: 0.84rem;
+  font-size: var(--font-size-sm);
   font-weight: 600;
 }
 

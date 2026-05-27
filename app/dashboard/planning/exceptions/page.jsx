@@ -1,5 +1,5 @@
 import DashboardShell from "@/components/dashboard/DashboardShell";
-import ModuleScaffold from "@/components/dashboard/ModuleScaffold";
+import ExceptionManager from "@/components/planning/ExceptionManager";
 
 export const metadata = {
   title: "Ajustes y excepciones | Control de Asistencia",
@@ -9,25 +9,12 @@ export default function PlanningExceptionsPage() {
   return (
     <DashboardShell
       title="Ajustes y excepciones"
-      description="Aquí quedará centralizada la edición del plan cuando la realidad obligue a desviarse del horario óptimo."
+      description="Centraliza las novedades reales que modifican el plan: ausencias, permisos, cambios, reemplazos y decisiones operativas."
     >
-      <ModuleScaffold
-        eyebrow="Planificación"
-        title="Gestión de cambios operativos"
-        description="El módulo servirá para registrar diferencias como enfermedad, cambios de turno, backups, reemplazos, permisos y ajustes específicos por empleado."
-        sections={[
-          {
-            title: "Tipos de excepciones previstas",
-            description: "Casos que luego debemos modelar explícitamente.",
-            bullets: [
-              "Enfermedad y ausencia inesperada.",
-              "Cambio manual de horario.",
-              "Cobertura por backup o reemplazo.",
-              "Permiso parcial o total.",
-              "Vacación que altera la cobertura del área.",
-            ],
-          },
-        ]}
+      <ExceptionManager
+        eyebrow="Planificacion"
+        title="Gestion de cambios operativos"
+        description="Registra que ocurrio, quien lo reporto, quien lo autorizo y que decision se tomo para asistencia, cobertura o nomina."
       />
     </DashboardShell>
   );

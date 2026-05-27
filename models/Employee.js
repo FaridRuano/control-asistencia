@@ -93,6 +93,39 @@ const employeeSchema = new Schema(
       trim: true,
       default: "",
     },
+    roleAssignments: {
+      type: [
+        {
+          code: {
+            type: String,
+            trim: true,
+            default: "",
+          },
+          name: {
+            type: String,
+            trim: true,
+            uppercase: true,
+            default: "",
+          },
+          areaCode: {
+            type: String,
+            trim: true,
+            default: "",
+          },
+          areaName: {
+            type: String,
+            trim: true,
+            uppercase: true,
+            default: "",
+          },
+          isPrimary: {
+            type: Boolean,
+            default: false,
+          },
+        },
+      ],
+      default: [],
+    },
     department: {
       type: String,
       trim: true,

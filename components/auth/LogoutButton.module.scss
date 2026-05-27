@@ -8,7 +8,7 @@
   background: linear-gradient(135deg, #0d2b63, #081c44);
   color: white;
   padding: 0.75rem 1rem;
-  font-size: 0.92rem;
+  font-size: var(--font-size-base);
   font-weight: 700;
   cursor: pointer;
   transition:

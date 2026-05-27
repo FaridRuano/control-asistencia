@@ -4,43 +4,113 @@
   overflow: hidden;
 }
 
+.tableShell {
+  min-height: 0;
+}
+
+.tableScroll {
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
 .table {
-  min-width: 1320px;
+  min-width: 620px;
+  font-size: var(--font-size-sm);
+  table-layout: fixed;
+
+  th,
+  td {
+    padding: 0.68rem 0.75rem;
+    overflow: hidden;
+  }
+
+  thead th {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: #edf4ff;
+  }
+
+  th:last-child,
+  td:last-child {
+    position: sticky;
+    right: 0;
+    z-index: 2;
+    background: rgba(255, 255, 255, 0.98);
+    box-shadow: -12px 0 18px rgba(16, 33, 62, 0.06);
+  }
+
+  th:last-child {
+    z-index: 4;
+    background: #edf4ff;
+  }
+}
+
+.statusColumn {
+  width: 1.35rem;
+}
+
+.employeeColumn {
+  width: 42%;
+}
+
+.structureColumn {
+  width: auto;
+}
+
+.actionsColumn {
+  width: 8.25rem;
 }
 
 .employeeRow {
-  cursor: default;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: 2px solid rgba(31, 111, 255, 0.45);
+    outline-offset: -2px;
+  }
 }
 
 .employeeName {
-  min-width: 220px;
   color: #10213e;
-  font-weight: 800;
-  line-height: 1.35;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .employeeMeta {
-  width: fit-content;
-  margin-top: 0.45rem;
+  max-width: 100%;
+  margin-top: 0.34rem;
   display: inline-flex;
   align-items: center;
-  gap: 0.38rem;
+  gap: 0.32rem;
   border-radius: 999px;
   background: #f4f8ff;
   color: #56709b;
-  padding: 0.36rem 0.62rem;
-  font-size: 0.78rem;
-  font-weight: 700;
+  padding: 0.28rem 0.52rem;
+  font-size: var(--font-size-micro);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  svg {
+    flex: 0 0 auto;
+  }
 }
 
 .stack {
-  min-width: 150px;
+  min-width: 0;
   display: grid;
-  gap: 0.3rem;
+  gap: 0.26rem;
   color: #52698d;
 
   strong {
     color: #16325f;
+    font-weight: 600;
     text-transform: capitalize;
   }
 }
@@ -48,14 +118,21 @@
 .badge,
 .badgeMuted {
   width: fit-content;
+  max-width: 100%;
   display: inline-flex;
   align-items: center;
   gap: 0.42rem;
   border-radius: 999px;
-  padding: 0.42rem 0.7rem;
-  font-size: 0.82rem;
-  font-weight: 800;
+  padding: 0.32rem 0.58rem;
+  font-size: var(--font-size-micro);
+  font-weight: 500;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  svg {
+    flex: 0 0 auto;
+  }
 }
 
 .badge {
@@ -70,6 +147,140 @@
 
 .amount {
   color: #16325f;
-  font-weight: 800;
+  font-weight: 600;
   white-space: nowrap;
+}
+
+.actionsCell {
+  width: 8.25rem;
+}
+
+.statusMarker {
+  display: block;
+  width: 0.36rem;
+  height: 1.9rem;
+  border-radius: 999px;
+}
+
+.statusActive {
+  background: #2fbe6f;
+}
+
+.statusInactive {
+  background: #d94747;
+  box-shadow: 0 0 0 3px rgba(217, 71, 71, 0.12);
+}
+
+.paginationBar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  border-top: 1px solid #e8eef8;
+  padding: 0.7rem 0.85rem;
+  color: #52698d;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  flex-wrap: wrap;
+}
+
+.paginationActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+
+  button {
+    min-height: 2.2rem;
+    padding: 0.45rem 0.7rem;
+
+    &:disabled {
+      cursor: not-allowed;
+      opacity: 0.48;
+    }
+  }
+
+  strong {
+    color: #10213e;
+    min-width: 3.8rem;
+    text-align: center;
+  }
+}
+
+@media (max-width: 640px) {
+  .tablePanel {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    padding: 0;
+    overflow: visible;
+
+    :global(.catalog-toolbar) {
+      margin-bottom: 1rem;
+    }
+
+    :global(.catalog-search) {
+      width: 100%;
+      min-width: 0;
+    }
+  }
+
+  .tableShell {
+    border-radius: 1.35rem;
+  }
+
+  .table {
+    width: 100%;
+    min-width: 0;
+
+    th:first-child,
+    td:first-child,
+    th:nth-child(3),
+    td:nth-child(3) {
+      display: none;
+    }
+
+    th:last-child,
+    td:last-child {
+      position: static;
+      right: auto;
+      box-shadow: none;
+    }
+  }
+
+  .statusColumn,
+  .structureColumn {
+    display: none;
+    width: 0;
+  }
+
+  .employeeColumn {
+    width: auto;
+  }
+
+  .actionsColumn {
+    width: 7.8rem;
+  }
+
+  .actionsCell {
+    width: 7.8rem;
+  }
+
+  .employeeName {
+    min-width: 0;
+  }
+
+  .employeeMeta {
+    display: none;
+  }
+
+  .paginationBar {
+    align-items: stretch;
+  }
+
+  .paginationActions {
+    width: 100%;
+    justify-content: space-between;
+  }
 }

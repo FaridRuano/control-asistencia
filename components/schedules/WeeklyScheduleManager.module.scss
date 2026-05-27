@@ -61,7 +61,7 @@
 
 .toastTitle {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: var(--font-size-base);
   font-weight: 700;
   color: #12315d;
 }
@@ -69,7 +69,7 @@
 .toastMessage {
   margin: 0.2rem 0 0;
   color: #4e648c;
-  font-size: 0.88rem;
+  font-size: var(--font-size-base);
   line-height: 1.5;
 }
 
@@ -130,7 +130,7 @@
 
 .eyebrow {
   margin: 0;
-  font-size: 0.72rem;
+  font-size: var(--font-size-micro);
   letter-spacing: 0.26em;
   text-transform: uppercase;
   color: var(--primary);
@@ -138,7 +138,7 @@
 
 .title {
   margin: 0.5rem 0 0;
-  font-size: 1.35rem;
+  font-size: var(--font-size-title-lg);
   font-weight: 700;
   color: #10213e;
 }
@@ -147,7 +147,7 @@
   margin: 0.5rem 0 0;
   color: var(--text-muted);
   line-height: 1.75;
-  font-size: 0.93rem;
+  font-size: var(--font-size-lg);
   max-width: 40rem;
 }
 
@@ -174,7 +174,7 @@
 .label {
   display: block;
   margin-bottom: 0.45rem;
-  font-size: 0.92rem;
+  font-size: var(--font-size-base);
   font-weight: 700;
   color: #1c315d;
 }
@@ -204,7 +204,7 @@
 }
 
 .toolbarLabel {
-  font-size: 0.76rem;
+  font-size: var(--font-size-xs);
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: #5e7295;
@@ -348,7 +348,7 @@
 .employeeMeta,
 .emptyEmployees {
   color: var(--text-muted);
-  font-size: 0.88rem;
+  font-size: var(--font-size-base);
 }
 
 .clearButton,
@@ -446,7 +446,7 @@
 }
 
 .feedback {
-  font-size: 0.92rem;
+  font-size: var(--font-size-base);
 }
 
 .error {
@@ -562,7 +562,7 @@
 
 .dayHint {
   color: var(--text-muted);
-  font-size: 0.82rem;
+  font-size: var(--font-size-sm);
   white-space: nowrap;
 }
 
@@ -600,7 +600,7 @@
 .timeInput {
   width: 100%;
   min-width: 0;
-  font-size: 0.9rem;
+  font-size: var(--font-size-base);
   font-variant-numeric: tabular-nums;
   border: 0;
   outline: none;
@@ -631,7 +631,7 @@
   min-width: 7.6rem;
   border-radius: 999px;
   padding: 0.25rem 0.7rem;
-  font-size: 0.82rem;
+  font-size: var(--font-size-sm);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -658,7 +658,7 @@
   justify-content: center;
   border-radius: 999px;
   padding: 0.4rem 0.7rem;
-  font-size: 0.8rem;
+  font-size: var(--font-size-xs);
   font-weight: 700;
 }
 
