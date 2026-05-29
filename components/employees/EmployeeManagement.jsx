@@ -11,7 +11,7 @@ import {
   ReceiptText,
   RotateCcw,
   Search,
-  Trash2,
+  UserMinus,
   UserRound,
 } from "lucide-react";
 
@@ -26,9 +26,27 @@ import styles from "./EmployeeManagement.module.scss";
 
 const EMPLOYEES_PER_PAGE = 8;
 
+const EMPLOYMENT_RELATION_LABELS = {
+  nomina: "Nomina",
+  prestacion_servicios: "Prestacion de servicios",
+};
+
+const EMPLOYMENT_RELATION_OPTIONS = [
+  { value: "nomina", label: "Nomina" },
+  { value: "prestacion_servicios", label: "Prestacion de servicios" },
+];
+
+function getTodayInputValue() {
+  const today = new Date();
+  const offset = today.getTimezoneOffset();
+  const localDate = new Date(today.getTime() - offset * 60 * 1000);
+
+  return localDate.toISOString().slice(0, 10);
+}
+
 function getInitialEmployeeUrlState() {
   if (typeof window === "undefined") {
-    return { search: "", page: 1, area: "", role: "", branch: "" };
+    return { search: "", page: 1, area: "", role: "", branch: "", relation: "" };
   }
 
   const params = new URLSearchParams(window.location.search);
@@ -40,6 +58,7 @@ function getInitialEmployeeUrlState() {
     area: params.get("area") || "",
     role: params.get("role") || "",
     branch: params.get("branch") || "",
+    relation: params.get("relation") || "",
   };
 }
 
@@ -50,6 +69,7 @@ const INITIAL_FORM = {
   personalEmail: "",
   address: "",
   phone: "",
+  employmentRelation: "nomina",
   branchId: "",
   branchCode: "",
   branchName: "",
@@ -104,6 +124,7 @@ function mapEmployeeToForm(employee, branches = [], roles = []) {
     personalEmail: employee.personalEmail || "",
     address: employee.address || "",
     phone: employee.phone || "",
+    employmentRelation: employee.employmentRelation || "nomina",
     branchId: employee.branchId || branch?.id || "",
     branchCode: employee.branchCode || branch?.code || "",
     branchName: employee.branchName || employee.branch || branch?.name || "",
@@ -137,6 +158,7 @@ function buildEmployeeSearchText(employee) {
     employee.personalEmail,
     employee.phone,
     employee.address,
+    EMPLOYMENT_RELATION_LABELS[employee.employmentRelation],
     employee.branchName,
     employee.branch,
     employee.roleName,
@@ -179,10 +201,12 @@ export default function EmployeeManagement() {
   const [areaFilter, setAreaFilter] = useState(initialUrlState.area);
   const [roleFilter, setRoleFilter] = useState(initialUrlState.role);
   const [branchFilter, setBranchFilter] = useState(initialUrlState.branch);
+  const [relationFilter, setRelationFilter] = useState(initialUrlState.relation);
   const [page, setPage] = useState(initialUrlState.page);
   const [editingEmployeeId, setEditingEmployeeId] = useState("");
   const [selectedEmployee, setSelectedEmployee] = useState(null);
-  const [employeeToDelete, setEmployeeToDelete] = useState(null);
+  const [employeeToDismiss, setEmployeeToDismiss] = useState(null);
+  const [dismissDate, setDismissDate] = useState("");
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [notice, setNotice] = useState(null);
@@ -234,6 +258,7 @@ export default function EmployeeManagement() {
     const cleanArea = String(nextState.area || "").trim();
     const cleanRole = String(nextState.role || "").trim();
     const cleanBranch = String(nextState.branch || "").trim();
+    const cleanRelation = String(nextState.relation || "").trim();
 
     if (cleanSearch) {
       params.set("q", cleanSearch);
@@ -263,6 +288,12 @@ export default function EmployeeManagement() {
       params.set("branch", cleanBranch);
     } else {
       params.delete("branch");
+    }
+
+    if (cleanRelation) {
+      params.set("relation", cleanRelation);
+    } else {
+      params.delete("relation");
     }
 
     const queryString = params.toString();
@@ -421,11 +452,12 @@ export default function EmployeeManagement() {
       (!normalizedSearch || buildEmployeeSearchText(employee).includes(normalizedSearch)) &&
       (!areaFilter || getEmployeeAreaCodes(employee).has(areaFilter)) &&
       (!roleFilter || getEmployeeRoleCodes(employee).has(roleFilter)) &&
-      (!branchFilter || getEmployeeBranchCodes(employee).has(branchFilter)),
+      (!branchFilter || getEmployeeBranchCodes(employee).has(branchFilter)) &&
+      (!relationFilter || (employee.employmentRelation || "nomina") === relationFilter),
     );
-  }, [areaFilter, branchFilter, roleFilter, search, sortedEmployees]);
+  }, [areaFilter, branchFilter, relationFilter, roleFilter, search, sortedEmployees]);
 
-  const hasActiveFilters = Boolean(search.trim() || areaFilter || roleFilter || branchFilter);
+  const hasActiveFilters = Boolean(search.trim() || areaFilter || roleFilter || branchFilter || relationFilter);
 
   const totalPages = Math.max(1, Math.ceil(filteredEmployees.length / EMPLOYEES_PER_PAGE));
   const currentPage = Math.min(page, totalPages);
@@ -459,6 +491,7 @@ export default function EmployeeManagement() {
       area: areaFilter,
       role: roleFilter,
       branch: branchFilter,
+      relation: relationFilter,
     });
   }
 
@@ -472,6 +505,7 @@ export default function EmployeeManagement() {
       area: value,
       role: "",
       branch: branchFilter,
+      relation: relationFilter,
     });
   }
 
@@ -484,6 +518,7 @@ export default function EmployeeManagement() {
       area: areaFilter,
       role: value,
       branch: branchFilter,
+      relation: relationFilter,
     });
   }
 
@@ -496,6 +531,20 @@ export default function EmployeeManagement() {
       area: areaFilter,
       role: roleFilter,
       branch: value,
+      relation: relationFilter,
+    });
+  }
+
+  function handleRelationFilterChange(value) {
+    setRelationFilter(value);
+    setPage(1);
+    replaceEmployeeUrlState({
+      search,
+      page: 1,
+      area: areaFilter,
+      role: roleFilter,
+      branch: branchFilter,
+      relation: value,
     });
   }
 
@@ -504,6 +553,7 @@ export default function EmployeeManagement() {
     setAreaFilter("");
     setRoleFilter("");
     setBranchFilter("");
+    setRelationFilter("");
     setPage(1);
     replaceEmployeeUrlState({
       search: "",
@@ -511,6 +561,7 @@ export default function EmployeeManagement() {
       area: "",
       role: "",
       branch: "",
+      relation: "",
     });
   }
 
@@ -524,6 +575,7 @@ export default function EmployeeManagement() {
       area: areaFilter,
       role: roleFilter,
       branch: branchFilter,
+      relation: relationFilter,
     });
   }
 
@@ -621,35 +673,48 @@ export default function EmployeeManagement() {
     });
   }
 
-  function requestDelete(employee) {
-    setEmployeeToDelete(employee);
+  function requestDismiss(employee) {
+    setEmployeeToDismiss(employee);
+    setDismissDate(employee.terminationDate || getTodayInputValue());
   }
 
-  function confirmDelete() {
-    if (!employeeToDelete) {
+  function confirmDismiss() {
+    if (!employeeToDismiss) {
+      return;
+    }
+
+    if (!dismissDate) {
+      showNotice("error", "Selecciona la fecha de salida del empleado.");
       return;
     }
 
     startTransition(async () => {
       try {
-        const response = await fetch(`/api/employees/${employeeToDelete.id}`, {
+        const response = await fetch(`/api/employees/${employeeToDismiss.id}`, {
           method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            terminationDate: dismissDate,
+          }),
         });
         const payload = await response.json();
 
         if (!response.ok) {
-          throw new Error(payload.error || "No se pudo eliminar el empleado.");
+          throw new Error(payload.error || "No se pudo despedir el empleado.");
         }
 
         await refreshEmployees();
         setSelectedEmployee(null);
-        showNotice("success", "Empleado eliminado correctamente.");
+        showNotice("success", "Empleado despedido correctamente. Su historial se mantiene disponible.");
 
-        if (editingEmployeeId === employeeToDelete.id) {
+        if (editingEmployeeId === employeeToDismiss.id) {
           closeDrawer();
         }
 
-        setEmployeeToDelete(null);
+        setEmployeeToDismiss(null);
+        setDismissDate("");
       } catch (requestError) {
         showNotice("error", requestError.message);
       }
@@ -730,6 +795,22 @@ export default function EmployeeManagement() {
                 ))}
               </select>
             </label>
+
+            <label className={styles.filterControl}>
+              <ReceiptText size={16} />
+              <select
+                value={relationFilter}
+                onChange={(event) => handleRelationFilterChange(event.target.value)}
+                aria-label="Filtrar por relación"
+              >
+                <option value="">Todas las relaciones</option>
+                {EMPLOYMENT_RELATION_OPTIONS.map((relation) => (
+                  <option key={relation.value} value={relation.value}>
+                    {relation.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
 
           {hasActiveFilters ? (
@@ -802,6 +883,7 @@ export default function EmployeeManagement() {
                         <div className={styles.employeeName}>{employee.fullName}</div>
                         <span className={styles.employeeMeta}>
                           <UserRound size={14} />
+                          {EMPLOYMENT_RELATION_LABELS[employee.employmentRelation] || "Nomina"} ·{" "}
                           {employee.organizationLabel || "Estructura pendiente"}
                         </span>
                       </td>
@@ -840,18 +922,20 @@ export default function EmployeeManagement() {
                           >
                             <Edit3 size={16} />
                           </button>
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              requestDelete(employee);
-                            }}
-                            className="catalog-icon-button danger"
-                            aria-label={`Eliminar ${employee.fullName}`}
-                            title="Eliminar empleado"
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                          {employee.isActive !== false ? (
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                requestDismiss(employee);
+                              }}
+                              className="catalog-icon-button danger"
+                              aria-label={`Despedir ${employee.fullName}`}
+                              title="Despedir empleado"
+                            >
+                              <UserMinus size={16} />
+                            </button>
+                          ) : null}
                         </div>
                       </td>
                     </tr>
@@ -921,18 +1005,32 @@ export default function EmployeeManagement() {
         employee={selectedEmployee}
         onClose={() => setSelectedEmployee(null)}
         onEdit={handleEdit}
-        onDelete={requestDelete}
+        onDelete={requestDismiss}
       />
 
       <ConfirmDialog
-        isOpen={Boolean(employeeToDelete)}
-        title="Eliminar empleado"
-        message={`¿Deseas eliminar a "${employeeToDelete?.fullName || ""}"? Esta acción no se puede deshacer.`}
-        confirmLabel={isPending ? "Eliminando..." : "Eliminar"}
+        isOpen={Boolean(employeeToDismiss)}
+        title="Despedir empleado"
+        message={`¿Deseas despedir a "${employeeToDismiss?.fullName || ""}"? Sus registros se conservarán para histórico, pero ya no se incluirá en horarios ni procesos futuros.`}
+        confirmLabel={isPending ? "Procesando..." : "Despedir"}
         isPending={isPending}
-        onCancel={() => setEmployeeToDelete(null)}
-        onConfirm={confirmDelete}
-      />
+        confirmDisabled={!dismissDate}
+        onCancel={() => {
+          setEmployeeToDismiss(null);
+          setDismissDate("");
+        }}
+        onConfirm={confirmDismiss}
+      >
+        <label className={styles.dismissField}>
+          <span>Último día de actividades</span>
+          <input
+            type="date"
+            value={dismissDate}
+            onChange={(event) => setDismissDate(event.target.value)}
+            disabled={isPending}
+          />
+        </label>
+      </ConfirmDialog>
     </div>
   );
 }

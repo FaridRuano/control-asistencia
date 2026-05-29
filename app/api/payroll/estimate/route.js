@@ -13,8 +13,10 @@ import { isAuthenticated } from "@/lib/auth";
 import connectToDatabase from "@/lib/db/mongodb";
 import { serializeEmployee } from "@/lib/employees";
 import calculatePayrollEstimate from "@/lib/payroll/calculatePayrollEstimate";
+import { resolveMonthlyBaseHours } from "@/lib/payroll/monthlyBaseHours";
 import AttendancePunch from "@/models/AttendancePunch";
 import Employee from "@/models/Employee";
+import LaborRuleConfig from "@/models/LaborRuleConfig";
 import PayrollIncompleteDayDecision from "@/models/PayrollIncompleteDayDecision";
 import PayrollLateDecision from "@/models/PayrollLateDecision";
 import PayrollSupplementaryDecision from "@/models/PayrollSupplementaryDecision";
@@ -67,7 +69,7 @@ export async function GET(request) {
       ),
     ];
 
-    const [schedules, punches, supplementaryDecisions, lateDecisions, incompleteDayDecisions] =
+    const [schedules, punches, supplementaryDecisions, lateDecisions, incompleteDayDecisions, rules] =
       await Promise.all([
       WorkSchedule.find({
         employee: employeeId,
@@ -103,6 +105,7 @@ export async function GET(request) {
           $lte: monthEnd,
         },
       }).lean(),
+      LaborRuleConfig.findOne({ key: "default" }).lean(),
     ]);
 
     if (!schedules.length) {
@@ -152,6 +155,12 @@ export async function GET(request) {
       monthDate: month,
       punches,
       schedules,
+      monthlyBaseHours: (await resolveMonthlyBaseHours({
+        monthKey: format(month, "yyyy-MM"),
+        year: month.getFullYear(),
+        monthIndex: month.getMonth(),
+        dailyBaseHours: Number(rules?.dailyBaseHours) || 8,
+      })).hourlyDivisor,
       supplementaryByDate,
       lateByDate,
       incompleteDayByDate,

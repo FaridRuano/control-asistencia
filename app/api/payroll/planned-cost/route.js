@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { isAuthenticated } from "@/lib/auth";
 import connectToDatabase from "@/lib/db/mongodb";
+import { resolveMonthlyBaseHours } from "@/lib/payroll/monthlyBaseHours";
 import { parseMonthKey } from "@/lib/planning/holidays";
 import Employee from "@/models/Employee";
 import LaborRuleConfig from "@/models/LaborRuleConfig";
@@ -77,7 +78,7 @@ export async function GET(request) {
     await connectToDatabase();
 
     const { searchParams } = new URL(request.url);
-    const { monthKey } = parseMonthKey(searchParams.get("month"));
+    const { monthKey, year, monthIndex } = parseMonthKey(searchParams.get("month"));
     const branchCode = String(searchParams.get("branchCode") || "").trim().toUpperCase();
     const areaCode = String(searchParams.get("areaCode") || "").trim();
     const roleCode = String(searchParams.get("roleCode") || "").trim();
@@ -112,7 +113,13 @@ export async function GET(request) {
       ? await Employee.find({ _id: { $in: employeeIds } }).select({ salary: 1 }).lean()
       : [];
     const salaryByEmployee = new Map(employees.map((employee) => [employee._id.toString(), Number(employee.salary) || 0]));
-    const hourlyDivisor = Math.max((Number(rules?.dailyBaseHours) || 8) * 30, 1);
+    const monthlyBase = await resolveMonthlyBaseHours({
+      monthKey,
+      year,
+      monthIndex,
+      dailyBaseHours: Number(rules?.dailyBaseHours) || 8,
+    });
+    const hourlyDivisor = monthlyBase.hourlyDivisor;
     const supplementaryMultiplier = Number(rules?.supplementaryMultiplier) || 1.5;
     const extraordinaryMultiplier = Number(rules?.extraordinaryMultiplier) || 2;
     const rows = assignments.map((assignment) => {
@@ -239,6 +246,9 @@ export async function GET(request) {
       monthKey,
       rules: {
         hourlyDivisor,
+        laborableDays: monthlyBase.laborableDays,
+        dailyBaseHours: monthlyBase.dailyBaseHours,
+        holidayDateKeys: monthlyBase.holidayDateKeys,
         supplementaryMultiplier,
         extraordinaryMultiplier,
       },

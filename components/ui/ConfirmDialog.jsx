@@ -15,6 +15,8 @@ export default function ConfirmDialog({
   cancelLabel = "Cancelar",
   tone = "danger",
   isPending = false,
+  confirmDisabled = false,
+  children,
   onCancel,
   onConfirm,
 }) {
@@ -83,6 +85,8 @@ export default function ConfirmDialog({
           </button>
         </div>
 
+        {children ? <div className={styles.body}>{children}</div> : null}
+
         <div className={styles.actions}>
           <button
             type="button"
@@ -96,7 +100,7 @@ export default function ConfirmDialog({
             type="button"
             className={tone === "danger" ? styles.dangerButton : "catalog-button-primary"}
             onClick={onConfirm}
-            disabled={isPending}
+            disabled={isPending || confirmDisabled}
           >
             {confirmLabel}
           </button>

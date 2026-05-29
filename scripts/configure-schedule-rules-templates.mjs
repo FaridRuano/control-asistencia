@@ -7,6 +7,7 @@ import Role from "../models/Role.js";
 
 const AREA_LUNCH_RULES = [
   { areaCode: "ADMIN", areaName: "ADMINISTRATIVO", lunchDurationMinutes: 60 },
+  { areaCode: "GER", areaName: "GERENCIA", lunchDurationMinutes: 60 },
   { areaCode: "ALM", areaName: "ALMACEN", lunchDurationMinutes: 90 },
   { areaCode: "BOD", areaName: "BODEGA", lunchDurationMinutes: 90 },
   { areaCode: "CP", areaName: "CARGA PESADA", lunchDurationMinutes: 60 },
@@ -46,9 +47,9 @@ function row(dayOfWeek, dayType, startTime = "", endTime = "", lunchDurationMinu
   };
 }
 
-function weekdayRows({ startTime, endTime, lunchDurationMinutes }) {
+function weekdayRows({ startTime, endTime, lunchDurationMinutes, authorizedExtraMinutes = 60 }) {
   return [1, 2, 3, 4, 5].map((dayOfWeek) =>
-    row(dayOfWeek, "workday", startTime, endTime, lunchDurationMinutes, 60),
+    row(dayOfWeek, "workday", startTime, endTime, lunchDurationMinutes, authorizedExtraMinutes),
   );
 }
 
@@ -60,9 +61,9 @@ function weeklyRows({ startTime, endTime, lunchDurationMinutes, saturday = false
   ];
 }
 
-function baseRows({ startTime, endTime, lunchDurationMinutes }) {
+function baseRows({ startTime, endTime, lunchDurationMinutes, authorizedExtraMinutes = 60 }) {
   return [
-    ...weekdayRows({ startTime, endTime, lunchDurationMinutes }),
+    ...weekdayRows({ startTime, endTime, lunchDurationMinutes, authorizedExtraMinutes }),
     row(6, "off_day"),
     row(0, "off_day"),
   ];
@@ -100,15 +101,20 @@ function buildTemplatesForRole(area, role) {
         role,
         rotationGroup: "ADMIN_BASE",
         rows: baseRows({ startTime: "08:00", endTime: "18:00", lunchDurationMinutes }),
-        notes: `${note} Sabado y domingo quedan como descanso; si se trabajan, se planifican como extraordinarios.`,
+        notes: `${note} Sabado y domingo quedan como descanso opcional; si hay picadas, se calculan como extraordinarias sin almuerzo planificado.`,
       }),
+    ];
+  }
+
+  if (area.code === "GER") {
+    return [
       template({
-        name: `ADMINISTRATIVO ${role.name} SABADO 08H00`,
+        name: "GERENCIA BASE REFERENCIAL 08H00",
         area,
         role,
-        rotationGroup: "ADMIN_SABADO",
-        rows: weeklyRows({ startTime: "08:00", endTime: "18:00", lunchDurationMinutes, saturday: true }),
-        notes: `${note} Caso excepcional con sabado extraordinario y domingo libre.`,
+        rotationGroup: "GER_BASE",
+        rows: baseRows({ startTime: "08:00", endTime: "17:00", lunchDurationMinutes, authorizedExtraMinutes: 0 }),
+        notes: "Horario referencial de lunes a viernes. No requiere picadas y no genera horas suplementarias ni extraordinarias.",
       }),
     ];
   }
@@ -425,8 +431,8 @@ async function main() {
   );
 
   const [areas, roles] = await Promise.all([
-    Area.find({ code: { $in: ["ADMIN", "ALM", "BOD", "CP"] } }).lean(),
-    Role.find({ areaCode: { $in: ["ADMIN", "ALM", "BOD", "CP"] } }).lean(),
+    Area.find({ code: { $in: ["ADMIN", "GER", "ALM", "BOD", "CP"] } }).lean(),
+    Role.find({ areaCode: { $in: ["ADMIN", "GER", "ALM", "BOD", "CP"] } }).lean(),
   ]);
   const areasByCode = new Map(areas.map((area) => [area.code, area]));
   const rolesByArea = roles.reduce((map, role) => {
@@ -439,7 +445,7 @@ async function main() {
   }, new Map());
   const templates = [];
 
-  for (const areaCode of ["ADMIN", "ALM", "BOD", "CP"]) {
+  for (const areaCode of ["ADMIN", "GER", "ALM", "BOD", "CP"]) {
     const area = areasByCode.get(areaCode);
 
     if (!area) {
@@ -467,7 +473,7 @@ async function main() {
   }
 
   const staleTemplates = await BaseScheduleTemplate.find({
-    areaCode: { $in: ["ADMIN", "ALM", "BOD", "CP"] },
+    areaCode: { $in: ["ADMIN", "GER", "ALM", "BOD", "CP"] },
     isActive: false,
   }).lean();
 

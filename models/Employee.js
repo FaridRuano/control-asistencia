@@ -41,6 +41,11 @@ const employeeSchema = new Schema(
       trim: true,
       default: "",
     },
+    employmentRelation: {
+      type: String,
+      enum: ["nomina", "prestacion_servicios"],
+      default: "nomina",
+    },
     salary: {
       type: Number,
       default: 0,
@@ -134,6 +139,10 @@ const employeeSchema = new Schema(
     isActive: {
       type: Boolean,
       default: true,
+    },
+    terminationDate: {
+      type: Date,
+      default: null,
     },
   },
   {

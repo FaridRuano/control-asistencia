@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, Lock, RefreshCw, Save } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Download, Lock, RefreshCw, Save } from "lucide-react";
 
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import styles from "./MonthlyClosureView.module.scss";
@@ -45,6 +45,7 @@ export default function MonthlyClosureView() {
   const [payload, setPayload] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [error, setError] = useState("");
 
@@ -127,6 +128,41 @@ export default function MonthlyClosureView() {
     setIsConfirmOpen(true);
   }
 
+  async function exportPayrollCsv() {
+    if (isExporting || isLoading || !rows.length) return;
+
+    try {
+      setIsExporting(true);
+      setError("");
+
+      const params = new URLSearchParams();
+      params.set("month", month);
+      params.set("export", "payroll-csv");
+      if (isLiveMode) params.set("mode", "live");
+
+      const response = await fetch(`/api/attendance/monthly-closure?${params.toString()}`);
+
+      if (!response.ok) {
+        const message = await response.json().catch(() => null);
+        throw new Error(message?.error || "No se pudo exportar el cierre mensual.");
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `cierre-mensual-${month}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setIsExporting(false);
+    }
+  }
+
   useEffect(() => {
     loadClosure(initialStateRef.current.month, initialStateRef.current.mode);
   }, []);
@@ -157,6 +193,16 @@ export default function MonthlyClosureView() {
               </button>
             </>
           ) : null}
+
+          <button
+            type="button"
+            className={styles.exportButton}
+            onClick={exportPayrollCsv}
+            disabled={isExporting || isSaving || isLoading || !rows.length}
+          >
+            {isExporting ? <RefreshCw size={16} /> : <Download size={16} />}
+            Exportar nómina
+          </button>
 
           <button
             type="button"

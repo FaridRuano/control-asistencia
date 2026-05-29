@@ -257,6 +257,37 @@
   }
 }
 
+.dismissField {
+  display: grid;
+  gap: 0.45rem;
+  color: #52698d;
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+
+  input {
+    width: 100%;
+    min-height: 2.6rem;
+    border: 1px solid #dbe6f5;
+    border-radius: 0.8rem;
+    background: #ffffff;
+    color: #10213e;
+    padding: 0 0.75rem;
+    font: inherit;
+    font-weight: 600;
+    outline: 0;
+
+    &:focus {
+      border-color: rgba(31, 111, 255, 0.5);
+      box-shadow: 0 0 0 3px rgba(31, 111, 255, 0.12);
+    }
+
+    &:disabled {
+      cursor: not-allowed;
+      opacity: 0.65;
+    }
+  }
+}
+
 @media (max-width: 640px) {
   .tablePanel {
     border: 0;

@@ -47,6 +47,7 @@
 
 .closedBadge,
 .secondaryButton,
+.exportButton,
 .saveButton {
   min-height: 2.55rem;
   display: inline-flex;
@@ -67,12 +68,14 @@
 .actions {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 0.6rem;
   align-items: center;
   min-width: 0;
 }
 
 .secondaryButton,
+.exportButton,
 .saveButton {
   width: 12rem;
   flex: 0 0 12rem;
@@ -85,6 +88,13 @@
   cursor: pointer;
 }
 
+.exportButton {
+  border: 1px solid rgba(31, 92, 154, 0.16);
+  background: #edf5ff;
+  color: #194f82;
+  cursor: pointer;
+}
+
 .saveButton {
   border: 0;
   background: #10213e;
@@ -93,6 +103,7 @@
 }
 
 .secondaryButton:disabled,
+.exportButton:disabled,
 .saveButton:disabled {
   cursor: not-allowed;
   opacity: 0.58;
@@ -216,6 +227,7 @@
   }
 
   .secondaryButton,
+  .exportButton,
   .saveButton {
     width: 100%;
     flex-basis: auto;

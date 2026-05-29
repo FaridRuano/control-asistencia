@@ -19,6 +19,7 @@ const branchByPlace = new Map([
 
 const areaByExcelValue = new Map([
   ["ADMINISTRATIVO", { code: "ADMIN", name: "ADMINISTRATIVO" }],
+  ["GERENCIA", { code: "GER", name: "GERENCIA" }],
   ["ALMACEN", { code: "ALM", name: "ALMACEN" }],
   ["ALMACEN SALCEDO", { code: "ALM", name: "ALMACEN" }],
   ["BODEGA", { code: "BOD", name: "BODEGA" }],
@@ -34,6 +35,7 @@ const roleCodeByAreaAndName = new Map([
   ["ADMINISTRATIVO|JEFATURA", "JEFADM"],
   ["ADMINISTRATIVO|MARKETING", "MARKET"],
   ["ADMINISTRATIVO|PAGOS", "PAGOS"],
+  ["GERENCIA|GERENCIA", "GERGEN"],
   ["ALMACEN|CAJERO", "CAJALM"],
   ["ALMACEN|CHOFER", "CHOALM"],
   ["ALMACEN|JEFATURA", "JEFALM"],
@@ -160,6 +162,7 @@ function buildPayload(row, existing = {}) {
     personalEmail: existing.personalEmail || "",
     address: existing.address || "",
     phone: existing.phone || "",
+    employmentRelation: existing.employmentRelation || "nomina",
     salary: row.salary,
     birthDate: existing.birthDate || null,
     branchId: existing.branchId || "",

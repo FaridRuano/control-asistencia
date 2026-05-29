@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Edit3, ReceiptText, Trash2 } from "lucide-react";
+import { Edit3, ReceiptText, UserMinus } from "lucide-react";
 
 import CatalogDrawer from "@/components/catalog/CatalogDrawer";
 import { planningModulePath } from "@/lib/modules/planning/routes";
@@ -11,6 +11,11 @@ const DOCUMENT_TYPE_LABELS = {
   cedula: "Cedula",
   pasaporte: "Pasaporte",
   ruc: "RUC",
+};
+
+const EMPLOYMENT_RELATION_LABELS = {
+  nomina: "Nomina",
+  prestacion_servicios: "Prestacion de servicios",
 };
 
 function formatValue(value) {
@@ -47,12 +52,14 @@ export default function EmployeeDetailModal({ employee, onClose, onEdit, onDelet
     ["Direccion", employee?.address],
   ];
   const workDetails = [
+    ["Relacion", EMPLOYMENT_RELATION_LABELS[employee?.employmentRelation] || "Nomina"],
     ["Sucursal", employee?.branchName || employee?.branch],
     ["Rol principal", employee?.roleName],
     ["Roles operativos", (employee?.roleAssignments || []).map((role) => role.name).join(", ")],
     ["Area", employee?.areaName],
     ["Sueldo", formatMoney(employee?.salary)],
     ["Biometrico", employee?.biometricCode],
+    ["Fecha de salida", employee?.terminationDate],
     ["Fecha de nacimiento", employee?.birthDate],
   ];
 
@@ -83,10 +90,12 @@ export default function EmployeeDetailModal({ employee, onClose, onEdit, onDelet
               <ReceiptText size={16} />
               Ver nómina
             </Link>
-            <button type="button" className="catalog-button-ghost" onClick={() => onDelete(employee)}>
-              <Trash2 size={16} />
-              Eliminar
-            </button>
+            {employee.isActive !== false ? (
+              <button type="button" className="catalog-button-ghost" onClick={() => onDelete(employee)}>
+                <UserMinus size={16} />
+                Despedir
+              </button>
+            ) : null}
             <button type="button" className="catalog-button-primary" onClick={() => onEdit(employee)}>
               <Edit3 size={16} />
               Editar

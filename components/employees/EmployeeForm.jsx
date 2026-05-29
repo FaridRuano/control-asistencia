@@ -10,6 +10,11 @@ const DOCUMENT_TYPES = [
   { value: "ruc", label: "RUC" },
 ];
 
+const EMPLOYMENT_RELATIONS = [
+  { value: "nomina", label: "Nomina" },
+  { value: "prestacion_servicios", label: "Prestacion de servicios" },
+];
+
 export default function EmployeeForm({
   form,
   branches,
@@ -101,6 +106,21 @@ export default function EmployeeForm({
           className="catalog-input"
           placeholder="Telefono o celular"
         />
+      </label>
+
+      <label className="catalog-field">
+        <span className="catalog-label">Relacion de dependencia</span>
+        <select
+          value={form.employmentRelation}
+          onChange={(event) => onFieldChange("employmentRelation", event.target.value)}
+          className="catalog-select"
+        >
+          {EMPLOYMENT_RELATIONS.map((relation) => (
+            <option key={relation.value} value={relation.value}>
+              {relation.label}
+            </option>
+          ))}
+        </select>
       </label>
 
       <label className="catalog-field">

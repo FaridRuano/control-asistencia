@@ -40,9 +40,8 @@ function scheduleLine(day) {
   }
 
   const lunch = day.lunchDurationMinutes ? `, almuerzo ${day.lunchDurationMinutes} min` : "";
-  const extra = day.authorizedExtraMinutes ? `, extra ${day.authorizedExtraMinutes} min` : "";
 
-  return `${day.startTime} - ${day.endTime}${lunch}${extra}`;
+  return `${day.startTime} - ${day.endTime}${lunch}`;
 }
 
 function dayTone(dayType) {

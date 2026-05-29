@@ -4,6 +4,7 @@ import { createAuditLog, resolveAuditActor } from "@/lib/audit";
 import { isAuthenticated } from "@/lib/auth";
 import connectToDatabase from "@/lib/db/mongodb";
 import { parseMonthKey } from "@/lib/planning/holidays";
+import Employee from "@/models/Employee";
 import MonthlyAttendanceClosure from "@/models/MonthlyAttendanceClosure";
 
 function currentMonthKey() {
@@ -138,6 +139,83 @@ function sumTotals(rows) {
   );
 }
 
+function formatPayrollMinutes(minutes) {
+  const value = Math.max(0, Math.round(Number(minutes) || 0));
+  const hours = Math.floor(value / 60);
+  const rest = value % 60;
+
+  return `${hours},${String(rest).padStart(2, "0")}`;
+}
+
+function escapeCsvCell(value) {
+  const text = String(value ?? "");
+
+  if (!/[;"\r\n]/.test(text)) {
+    return text;
+  }
+
+  return `"${text.replaceAll("\"", "\"\"")}"`;
+}
+
+function monthRangeFromKey(monthKey) {
+  const { year, monthIndex } = parseMonthKey(monthKey);
+
+  return {
+    monthStart: new Date(year, monthIndex, 1),
+    nextMonthStart: new Date(year, monthIndex + 1, 1),
+  };
+}
+
+function wasEmployeeInPayrollDuringMonth(employee, monthStart) {
+  if (!employee) return false;
+  if ((employee.employmentRelation || "nomina") !== "nomina") return false;
+  if (employee.isActive !== false) return true;
+  if (!employee.terminationDate) return false;
+
+  return new Date(employee.terminationDate) >= monthStart;
+}
+
+function getRowEmployeeId(row) {
+  return row.employee?.toString?.() || row.employeeId || "";
+}
+
+async function buildPayrollCsv(rows, monthKey) {
+  const { monthStart } = monthRangeFromKey(monthKey);
+  const employeeIds = [...new Set(rows.map(getRowEmployeeId).filter(Boolean))];
+  const employees = employeeIds.length
+    ? await Employee.find({ _id: { $in: employeeIds } }).select({
+        dni: 1,
+        employmentRelation: 1,
+        isActive: 1,
+        terminationDate: 1,
+      }).lean()
+    : [];
+  const employeesById = new Map(employees.map((employee) => [employee._id.toString(), employee]));
+  const lines = [
+    ["Cedula", "HorasSuplementarias", "HorasExtraordinarias", "HorasNocturnas", "", "", ""],
+    ...rows
+      .slice()
+      .sort((left, right) => String(left.employeeName || "").localeCompare(String(right.employeeName || ""), "es"))
+      .filter((row) => wasEmployeeInPayrollDuringMonth(employeesById.get(getRowEmployeeId(row)), monthStart))
+      .map((row) => {
+        const employeeId = getRowEmployeeId(row);
+        const employee = employeesById.get(employeeId);
+
+        return [
+          employee?.dni || "",
+          formatPayrollMinutes(row.supplementaryMinutes),
+          formatPayrollMinutes(row.extraordinaryMinutes),
+          formatPayrollMinutes(0),
+          "",
+          "",
+          row.employeeName || "",
+        ];
+      }),
+  ];
+
+  return `\uFEFF${lines.map((line) => line.map(escapeCsvCell).join(";")).join("\r\n")}\r\n`;
+}
+
 async function ensureMonthlyClosureIndexes() {
   const collection = MonthlyAttendanceClosure.collection;
   const indexes = await collection.indexes();
@@ -194,10 +272,24 @@ export async function GET(request) {
     const monthKey = parseMonthKey(request.nextUrl.searchParams.get("month") || currentMonthKey()).monthKey;
     const mode = String(request.nextUrl.searchParams.get("mode") || "").trim();
     const wantsLive = mode === "live";
+    const wantsPayrollCsv = request.nextUrl.searchParams.get("export") === "payroll-csv";
     const closure = await MonthlyAttendanceClosure.findOne({ monthKey, isLatest: { $ne: false } })
       .sort({ version: -1, closedAt: -1 })
       .lean();
     const snapshot = wantsLive || !closure ? await buildComparisonSnapshot(request, monthKey) : null;
+
+    if (wantsPayrollCsv) {
+      const rows = snapshot?.rows || closure?.rows || [];
+      const csv = await buildPayrollCsv(rows, monthKey);
+
+      return new Response(csv, {
+        headers: {
+          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Disposition": `attachment; filename="cierre-mensual-${monthKey}.csv"`,
+          "Cache-Control": "no-store",
+        },
+      });
+    }
 
     return NextResponse.json({
       monthKey,

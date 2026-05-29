@@ -79,24 +79,14 @@ function calculatePresenceMinutes(row) {
 }
 
 function calculatePlannedNetMinutes(row, baseDailyMinutes, presenceMinutes = null) {
-  const authorizedExtraMinutes = Number(row.authorizedExtraMinutes) || 0;
-
   if (row.dayType === "weekend_overtime") {
-    return presenceMinutes ?? authorizedExtraMinutes;
+    return presenceMinutes || 0;
   }
 
-  const authorizedNetMinutes = Math.max(baseDailyMinutes + authorizedExtraMinutes, 0);
-
-  if (presenceMinutes === null) {
-    return authorizedNetMinutes;
-  }
-
-  return Math.min(authorizedNetMinutes, presenceMinutes);
+  return presenceMinutes ?? 0;
 }
 
 function getNetBreakdown(row, baseDailyMinutes, presenceMinutes = null) {
-  const authorizedExtraMinutes = Number(row.authorizedExtraMinutes) || 0;
-
   if (row.dayType === "weekend_overtime") {
     const extraordinaryMinutes = calculatePlannedNetMinutes(row, baseDailyMinutes, presenceMinutes);
 
@@ -137,7 +127,6 @@ function buildFormSignature(form) {
       lunchDurationMinutes: Number(row.lunchDurationMinutes) || 0,
       hasLunch: Boolean(row.hasLunch),
       endTime: row.endTime || "",
-      authorizedExtraMinutes: Number(row.authorizedExtraMinutes) || 0,
       graceMinutes: Number(row.graceMinutes) || 0,
     })),
     notes: String(form.notes || "").trim(),
@@ -241,12 +230,8 @@ export default function BaseSchedulesManager() {
         }
       }
 
-      const authorizedNetMinutes = row.dayType === "workday"
-        ? baseDailyMinutes + (Number(row.authorizedExtraMinutes) || 0)
-        : breakdown.totalMinutes;
-
-      if (authorizedNetMinutes > presenceMinutes) {
-        warnings.push(`${row.label}: el extra autorizado supera la presencia del turno.`);
+      if (breakdown.totalMinutes < baseDailyMinutes && row.dayType === "workday") {
+        warnings.push(`${row.label}: no completa las 8h netas.`);
       }
     });
 
@@ -713,7 +698,6 @@ export default function BaseSchedulesManager() {
                 <th>Tipo</th>
                 <th>Entrada</th>
                 <th>Almuerzo</th>
-                <th>Extra autorizado</th>
                 <th>Salida</th>
                 <th>Neto</th>
               </tr>
@@ -737,7 +721,6 @@ export default function BaseSchedulesManager() {
                     </td>
                     <td><input type="time" value={row.startTime} disabled={!canEditScheduleRows || disabled} onChange={(event) => updateRow(row.dayOfWeek, { startTime: event.target.value })} /></td>
                     <td><input className={styles.compactNumberInput} type="number" min="0" disabled={!canEditScheduleRows || disabled} value={row.lunchDurationMinutes} onChange={(event) => updateRow(row.dayOfWeek, { lunchDurationMinutes: event.target.value })} /></td>
-                    <td><input className={styles.compactNumberInput} type="number" min="0" disabled={!canEditScheduleRows || disabled} value={row.authorizedExtraMinutes} onChange={(event) => updateRow(row.dayOfWeek, { authorizedExtraMinutes: event.target.value })} /></td>
                     <td><input type="time" value={row.endTime} disabled={!canEditScheduleRows || disabled} onChange={(event) => updateRow(row.dayOfWeek, { endTime: event.target.value })} /></td>
                     <td>
                       <span className={`${styles.netTag} ${isShortPresence ? styles.netTagWarn : ""}`}>
@@ -829,7 +812,7 @@ export default function BaseSchedulesManager() {
                     </div>
                     <div className={styles.dayChips}>
                       {template.weeklyRows.map((row) => (
-                        <span key={row.dayOfWeek}>{row.label.slice(0, 3)} {row.startTime || "--"}-{row.endTime || "--"} / {minutesLabel(row.authorizedExtraMinutes)}</span>
+                        <span key={row.dayOfWeek}>{row.label.slice(0, 3)} {row.startTime || "--"}-{row.endTime || "--"}</span>
                       ))}
                     </div>
                     <div className={styles.cardActions}>
