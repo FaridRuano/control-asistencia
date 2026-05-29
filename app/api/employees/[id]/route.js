@@ -5,6 +5,26 @@ import connectToDatabase from "@/lib/db/mongodb";
 import { normalizeEmployeePayload, serializeEmployee } from "@/lib/employees";
 import Employee from "@/models/Employee";
 
+export async function GET(_request, context) {
+  const authenticated = await isAuthenticated();
+
+  if (!authenticated) {
+    return NextResponse.json({ error: "Sesión inválida o expirada." }, { status: 401 });
+  }
+
+  await connectToDatabase();
+  const { id } = await context.params;
+  const employee = await Employee.findById(id).lean();
+
+  if (!employee) {
+    return NextResponse.json({ error: "Empleado no encontrado." }, { status: 404 });
+  }
+
+  return NextResponse.json({
+    employee: serializeEmployee(employee),
+  });
+}
+
 export async function PATCH(request, context) {
   const authenticated = await isAuthenticated();
 

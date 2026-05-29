@@ -32,12 +32,10 @@ export default function AttendancePage() {
             description: "Cruce entre ejecución real y horario planificado.",
             href: planningModulePath("/attendance/comparison"),
           },
-        ]}
-        legacyLinks={[
           {
-            href: planningModulePath("/uploads"),
-            label: "Cargas actuales",
-            description: "Flujo actual para subir y procesar el archivo de asistencia.",
+            title: "Cierre de mes",
+            description: "Guardar una copia fija de horas para nómina.",
+            href: planningModulePath("/attendance/monthly-closure"),
           },
         ]}
       />

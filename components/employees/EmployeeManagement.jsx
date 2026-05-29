@@ -6,8 +6,10 @@ import {
   BriefcaseBusiness,
   Edit3,
   Landmark,
+  Layers3,
   Plus,
   ReceiptText,
+  RotateCcw,
   Search,
   Trash2,
   UserRound,
@@ -26,7 +28,7 @@ const EMPLOYEES_PER_PAGE = 8;
 
 function getInitialEmployeeUrlState() {
   if (typeof window === "undefined") {
-    return { search: "", page: 1 };
+    return { search: "", page: 1, area: "", role: "", branch: "" };
   }
 
   const params = new URLSearchParams(window.location.search);
@@ -35,6 +37,9 @@ function getInitialEmployeeUrlState() {
   return {
     search: params.get("q") || "",
     page: Number.isFinite(initialPage) && initialPage > 0 ? Math.floor(initialPage) : 1,
+    area: params.get("area") || "",
+    role: params.get("role") || "",
+    branch: params.get("branch") || "",
   };
 }
 
@@ -144,6 +149,26 @@ function buildEmployeeSearchText(employee) {
     .toLowerCase();
 }
 
+function getEmployeeRoleCodes(employee) {
+  const assignmentCodes = (employee.roleAssignments || [])
+    .map((role) => role.code)
+    .filter(Boolean);
+
+  return new Set([employee.roleCode, ...assignmentCodes].filter(Boolean));
+}
+
+function getEmployeeAreaCodes(employee) {
+  const assignmentAreaCodes = (employee.roleAssignments || [])
+    .map((role) => role.areaCode)
+    .filter(Boolean);
+
+  return new Set([employee.areaCode, ...assignmentAreaCodes].filter(Boolean));
+}
+
+function getEmployeeBranchCodes(employee) {
+  return new Set([employee.branchCode, employee.branchId, employee.branchName, employee.branch].filter(Boolean));
+}
+
 export default function EmployeeManagement() {
   const initialUrlState = useMemo(() => getInitialEmployeeUrlState(), []);
   const [employees, setEmployees] = useState([]);
@@ -151,6 +176,9 @@ export default function EmployeeManagement() {
   const [roles, setRoles] = useState([]);
   const [form, setForm] = useState(INITIAL_FORM);
   const [search, setSearch] = useState(initialUrlState.search);
+  const [areaFilter, setAreaFilter] = useState(initialUrlState.area);
+  const [roleFilter, setRoleFilter] = useState(initialUrlState.role);
+  const [branchFilter, setBranchFilter] = useState(initialUrlState.branch);
   const [page, setPage] = useState(initialUrlState.page);
   const [editingEmployeeId, setEditingEmployeeId] = useState("");
   const [selectedEmployee, setSelectedEmployee] = useState(null);
@@ -195,14 +223,17 @@ export default function EmployeeManagement() {
     };
   }, [clearNoticeTimers]);
 
-  const replaceEmployeeUrlState = useCallback((nextSearch, nextPage) => {
+  const replaceEmployeeUrlState = useCallback((nextState) => {
     if (typeof window === "undefined") {
       return;
     }
 
     const params = new URLSearchParams(window.location.search);
-    const cleanSearch = nextSearch.trim();
-    const cleanPage = Math.max(1, Math.floor(Number(nextPage) || 1));
+    const cleanSearch = String(nextState.search || "").trim();
+    const cleanPage = Math.max(1, Math.floor(Number(nextState.page) || 1));
+    const cleanArea = String(nextState.area || "").trim();
+    const cleanRole = String(nextState.role || "").trim();
+    const cleanBranch = String(nextState.branch || "").trim();
 
     if (cleanSearch) {
       params.set("q", cleanSearch);
@@ -214,6 +245,24 @@ export default function EmployeeManagement() {
       params.set("page", String(cleanPage));
     } else {
       params.delete("page");
+    }
+
+    if (cleanArea) {
+      params.set("area", cleanArea);
+    } else {
+      params.delete("area");
+    }
+
+    if (cleanRole) {
+      params.set("role", cleanRole);
+    } else {
+      params.delete("role");
+    }
+
+    if (cleanBranch) {
+      params.set("branch", cleanBranch);
+    } else {
+      params.delete("branch");
     }
 
     const queryString = params.toString();
@@ -266,17 +315,117 @@ export default function EmployeeManagement() {
     [employees],
   );
 
+  const areaOptions = useMemo(() => {
+    const byCode = new Map();
+
+    for (const role of roles) {
+      if (role.areaCode && role.areaName) {
+        byCode.set(role.areaCode, role.areaName);
+      }
+    }
+
+    for (const employee of employees) {
+      if (employee.areaCode && employee.areaName) {
+        byCode.set(employee.areaCode, employee.areaName);
+      }
+
+      for (const assignment of employee.roleAssignments || []) {
+        if (assignment.areaCode && assignment.areaName) {
+          byCode.set(assignment.areaCode, assignment.areaName);
+        }
+      }
+    }
+
+    return [...byCode]
+      .map(([code, name]) => ({ code, name }))
+      .sort((left, right) => left.name.localeCompare(right.name, "es"));
+  }, [employees, roles]);
+
+  const roleOptions = useMemo(() => {
+    const byCode = new Map();
+
+    for (const role of roles) {
+      if (role.code && role.name) {
+        byCode.set(role.code, {
+          code: role.code,
+          name: role.name,
+          areaCode: role.areaCode || "",
+          areaName: role.areaName || "",
+        });
+      }
+    }
+
+    for (const employee of employees) {
+      if (employee.roleCode && employee.roleName) {
+        byCode.set(employee.roleCode, {
+          code: employee.roleCode,
+          name: employee.roleName,
+          areaCode: employee.areaCode || "",
+          areaName: employee.areaName || "",
+        });
+      }
+
+      for (const assignment of employee.roleAssignments || []) {
+        if (assignment.code && assignment.name) {
+          byCode.set(assignment.code, {
+            code: assignment.code,
+            name: assignment.name,
+            areaCode: assignment.areaCode || "",
+            areaName: assignment.areaName || "",
+          });
+        }
+      }
+    }
+
+    return [...byCode.values()]
+      .filter((role) => !areaFilter || role.areaCode === areaFilter)
+      .sort((left, right) => {
+        const areaComparison = left.areaName.localeCompare(right.areaName, "es");
+
+        return areaComparison || left.name.localeCompare(right.name, "es");
+      });
+  }, [areaFilter, employees, roles]);
+
+  const branchOptions = useMemo(() => {
+    const byKey = new Map();
+
+    for (const branch of branches) {
+      const code = branch.code || branch.id || branch.name;
+
+      if (code) {
+        byKey.set(code, {
+          code,
+          name: branch.name || branch.code || code,
+        });
+      }
+    }
+
+    for (const employee of employees) {
+      const code = employee.branchCode || employee.branchId || employee.branchName || employee.branch;
+
+      if (code) {
+        byKey.set(code, {
+          code,
+          name: employee.branchName || employee.branch || employee.branchCode || code,
+        });
+      }
+    }
+
+    return [...byKey.values()].sort((left, right) => left.name.localeCompare(right.name, "es"));
+  }, [branches, employees]);
+
   const filteredEmployees = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
 
-    if (!normalizedSearch) {
-      return sortedEmployees;
-    }
-
     return sortedEmployees.filter((employee) =>
-      buildEmployeeSearchText(employee).includes(normalizedSearch),
+      (!normalizedSearch || buildEmployeeSearchText(employee).includes(normalizedSearch)) &&
+      (!areaFilter || getEmployeeAreaCodes(employee).has(areaFilter)) &&
+      (!roleFilter || getEmployeeRoleCodes(employee).has(roleFilter)) &&
+      (!branchFilter || getEmployeeBranchCodes(employee).has(branchFilter)),
     );
-  }, [search, sortedEmployees]);
+  }, [areaFilter, branchFilter, roleFilter, search, sortedEmployees]);
+
+  const hasActiveFilters = Boolean(search.trim() || areaFilter || roleFilter || branchFilter);
 
   const totalPages = Math.max(1, Math.ceil(filteredEmployees.length / EMPLOYEES_PER_PAGE));
   const currentPage = Math.min(page, totalPages);
@@ -304,14 +453,78 @@ export default function EmployeeManagement() {
   function handleSearchChange(value) {
     setSearch(value);
     setPage(1);
-    replaceEmployeeUrlState(value, 1);
+    replaceEmployeeUrlState({
+      search: value,
+      page: 1,
+      area: areaFilter,
+      role: roleFilter,
+      branch: branchFilter,
+    });
+  }
+
+  function handleAreaFilterChange(value) {
+    setAreaFilter(value);
+    setRoleFilter("");
+    setPage(1);
+    replaceEmployeeUrlState({
+      search,
+      page: 1,
+      area: value,
+      role: "",
+      branch: branchFilter,
+    });
+  }
+
+  function handleRoleFilterChange(value) {
+    setRoleFilter(value);
+    setPage(1);
+    replaceEmployeeUrlState({
+      search,
+      page: 1,
+      area: areaFilter,
+      role: value,
+      branch: branchFilter,
+    });
+  }
+
+  function handleBranchFilterChange(value) {
+    setBranchFilter(value);
+    setPage(1);
+    replaceEmployeeUrlState({
+      search,
+      page: 1,
+      area: areaFilter,
+      role: roleFilter,
+      branch: value,
+    });
+  }
+
+  function clearFilters() {
+    setSearch("");
+    setAreaFilter("");
+    setRoleFilter("");
+    setBranchFilter("");
+    setPage(1);
+    replaceEmployeeUrlState({
+      search: "",
+      page: 1,
+      area: "",
+      role: "",
+      branch: "",
+    });
   }
 
   function handlePageChange(nextPage) {
     const cleanPage = Math.min(Math.max(1, nextPage), totalPages);
 
     setPage(cleanPage);
-    replaceEmployeeUrlState(search, cleanPage);
+    replaceEmployeeUrlState({
+      search,
+      page: cleanPage,
+      area: areaFilter,
+      role: roleFilter,
+      branch: branchFilter,
+    });
   }
 
   function openEmployeeDetail(employee) {
@@ -455,19 +668,82 @@ export default function EmployeeManagement() {
         <div className="catalog-toolbar">
           <p className="catalog-count">
             {filteredEmployees.length} empleado{filteredEmployees.length === 1 ? "" : "s"}
-            {search.trim() ? ` de ${sortedEmployees.length}` : ""}
+            {hasActiveFilters ? ` de ${sortedEmployees.length}` : ""}
           </p>
 
-          <label className="catalog-search">
-            <Search size={16} />
-            <input
-              type="search"
-              value={search}
-              onChange={(event) => handleSearchChange(event.target.value)}
-              placeholder="Buscar empleado"
-              className="catalog-search-input"
-            />
-          </label>
+          <div className={styles.filterGrid}>
+            <label className="catalog-search">
+              <Search size={16} />
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => handleSearchChange(event.target.value)}
+                placeholder="Buscar empleado"
+                className="catalog-search-input"
+              />
+            </label>
+
+            <label className={styles.filterControl}>
+              <Layers3 size={16} />
+              <select
+                value={areaFilter}
+                onChange={(event) => handleAreaFilterChange(event.target.value)}
+                aria-label="Filtrar por área"
+              >
+                <option value="">Todas las áreas</option>
+                {areaOptions.map((area) => (
+                  <option key={area.code} value={area.code}>
+                    {area.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className={styles.filterControl}>
+              <BriefcaseBusiness size={16} />
+              <select
+                value={roleFilter}
+                onChange={(event) => handleRoleFilterChange(event.target.value)}
+                aria-label="Filtrar por rol"
+              >
+                <option value="">Todos los roles</option>
+                {roleOptions.map((role) => (
+                  <option key={role.code} value={role.code}>
+                    {role.areaName ? `${role.name} · ${role.areaName}` : role.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className={styles.filterControl}>
+              <Landmark size={16} />
+              <select
+                value={branchFilter}
+                onChange={(event) => handleBranchFilterChange(event.target.value)}
+                aria-label="Filtrar por sucursal"
+              >
+                <option value="">Todas las sucursales</option>
+                {branchOptions.map((branch) => (
+                  <option key={branch.code} value={branch.code}>
+                    {branch.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {hasActiveFilters ? (
+            <button
+              type="button"
+              className="catalog-button-ghost"
+              onClick={clearFilters}
+              aria-label="Limpiar filtros"
+              title="Limpiar filtros"
+            >
+              <RotateCcw size={16} />
+              Limpiar
+            </button>
+          ) : null}
 
           <button
             type="button"

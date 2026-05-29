@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { format, startOfWeek } from "date-fns";
 import { es } from "date-fns/locale";
 import {
@@ -138,6 +139,7 @@ export default function NormalizeAttendanceView({ uploadId }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isPublishingPunches, setIsPublishingPunches] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState(null);
   const toastTimeoutRef = useRef(null);
@@ -162,6 +164,7 @@ export default function NormalizeAttendanceView({ uploadId }) {
     });
   }, [response?.employees, search]);
   const isNormalizationSaved = response?.source === "saved";
+  const showBlockingOverlay = isSaving || isPublishingPunches;
 
   function showToast(type, message) {
     setToast({ type, message });
@@ -189,7 +192,17 @@ export default function NormalizeAttendanceView({ uploadId }) {
       }
 
       setResponse(payload);
-      showToast("success", payload.message || "Normalización guardada correctamente.");
+      showToast(
+        "success",
+        [
+          payload.message || "Normalización guardada y picadas cargadas correctamente.",
+          payload.publishSummary?.skippedUnmatchedEmployees
+            ? `Se omitieron ${payload.publishSummary.skippedUnmatchedPunches} picadas sin empleado activo en la sucursal.`
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
+      );
     } catch (requestError) {
       showToast("error", requestError.message);
     } finally {
@@ -223,7 +236,14 @@ export default function NormalizeAttendanceView({ uploadId }) {
 
       showToast(
         "success",
-        `Se cargaron ${payload.publishedPunches} picadas para ${payload.publishedEmployees} empleados.`,
+        [
+          `Se cargaron ${payload.publishedPunches} picadas para ${payload.publishedEmployees} empleados.`,
+          payload.skippedUnmatchedEmployees
+            ? `Se omitieron ${payload.skippedUnmatchedPunches} picadas sin empleado activo en la sucursal.`
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
       );
     } catch (requestError) {
       showToast("error", requestError.message);
@@ -231,6 +251,10 @@ export default function NormalizeAttendanceView({ uploadId }) {
       setIsPublishingPunches(false);
     }
   }
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   useEffect(() => {
     let isCancelled = false;
@@ -274,7 +298,7 @@ export default function NormalizeAttendanceView({ uploadId }) {
   }, [uploadId]);
 
   useEffect(() => {
-    if (!isPublishingPunches) {
+    if (!isPublishingPunches && !isSaving) {
       return undefined;
     }
 
@@ -289,21 +313,26 @@ export default function NormalizeAttendanceView({ uploadId }) {
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
-  }, [isPublishingPunches]);
+  }, [isPublishingPunches, isSaving]);
 
   return (
     <>
-      {isPublishingPunches ? (
-        <div className={styles.blockingOverlay} role="alert" aria-live="assertive">
-          <div className={styles.blockingCard}>
-            <div className={styles.loadingSpinner} />
-            <h2 className={styles.blockingTitle}>Cargando picadas al sistema</h2>
-            <p className={styles.blockingMessage}>
-              No cierres esta página ni navegues a otra sección hasta que termine el proceso.
-            </p>
-          </div>
-        </div>
-      ) : null}
+      {showBlockingOverlay && isMounted
+        ? createPortal(
+            <div className={styles.blockingOverlay} role="alert" aria-live="assertive">
+              <div className={styles.blockingCard}>
+                <div className={styles.loadingSpinner} />
+                <h2 className={styles.blockingTitle}>
+                  {isSaving ? "Guardando y cargando picadas" : "Cargando picadas al sistema"}
+                </h2>
+                <p className={styles.blockingMessage}>
+                  No cierres esta página ni navegues a otra sección hasta que termine el proceso.
+                </p>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
 
       {toast ? (
         <div
@@ -335,7 +364,7 @@ export default function NormalizeAttendanceView({ uploadId }) {
 
       <section className={styles.panel}>
         <div className={styles.topBar}>
-          <Link href={planningModulePath("/uploads")} className={styles.backLink}>
+          <Link href={planningModulePath("/attendance/uploads")} className={styles.backLink}>
             <ArrowLeft size={16} />
             Volver a cargas
           </Link>
@@ -376,7 +405,7 @@ export default function NormalizeAttendanceView({ uploadId }) {
                     className={styles.saveButton}
                   >
                     <Save size={16} />
-                    {isSaving ? "Guardando..." : "Guardar normalización"}
+                    {isSaving ? "Procesando..." : "Guardar y cargar picadas"}
                   </button>
                 ) : null}
 
@@ -408,6 +437,7 @@ export default function NormalizeAttendanceView({ uploadId }) {
             <div className={styles.summaryGrid}>
               {[
                 { label: "Archivo", value: response.upload?.fileName || "N/D" },
+                { label: "Sucursal", value: response.upload?.branchName || response.upload?.branchCode || "N/D" },
                 { label: "Empleados", value: response.summary?.totalEmployees || 0 },
                 { label: "Picadas", value: response.summary?.totalPunches || 0 },
                 { label: "Registros", value: totalRows },

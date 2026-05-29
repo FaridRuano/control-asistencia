@@ -4,6 +4,8 @@ const normalizedEmployeeSchema = new Schema(
   {
     biometricCode: { type: String, default: "" },
     fullName: { type: String, default: "" },
+    branchCode: { type: String, default: "" },
+    branchName: { type: String, default: "" },
     department: { type: String, default: "" },
     punchCount: { type: Number, default: 0 },
     punches: [
@@ -36,6 +38,18 @@ const attendanceUploadSchema = new Schema(
     originalFile: {
       type: Buffer,
       required: true,
+    },
+    branchCode: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      default: "",
+    },
+    branchName: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      default: "",
     },
     month: {
       type: Number,
@@ -90,6 +104,18 @@ const attendanceUploadSchema = new Schema(
       default: 0,
     },
     publishedPunches: {
+      type: Number,
+      default: 0,
+    },
+    skippedDuplicatePunches: {
+      type: Number,
+      default: 0,
+    },
+    skippedUnmatchedEmployees: {
+      type: Number,
+      default: 0,
+    },
+    skippedUnmatchedPunches: {
       type: Number,
       default: 0,
     },

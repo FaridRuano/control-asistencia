@@ -17,7 +17,7 @@ import {
 import { planningModulePath } from "@/lib/modules/planning/routes";
 import styles from "./UploadAttendanceForm.module.scss";
 
-const ACCEPTED_EXTENSIONS = [".xls", ".xlsx"];
+const ACCEPTED_EXTENSIONS = [".xls", ".xlsx", ".csv", ".dat"];
 const ACCEPTED_FILES_LABEL = ACCEPTED_EXTENSIONS.join(", ");
 const STATUS_LABELS = {
   uploaded: "Cargado",
@@ -65,6 +65,8 @@ function formatUploadStatus(status) {
 
 export default function UploadAttendanceForm() {
   const [selectedFile, setSelectedFile] = useState(null);
+  const [branchCode, setBranchCode] = useState("");
+  const [branches, setBranches] = useState([]);
   const [savedUpload, setSavedUpload] = useState(null);
   const [uploadsHistory, setUploadsHistory] = useState([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(true);
@@ -74,6 +76,7 @@ export default function UploadAttendanceForm() {
   const inputRef = useRef(null);
   const toastTimeoutRef = useRef(null);
   const isUploadLocked = Boolean(savedUpload);
+  const isInitialLoading = isHistoryLoading && !branches.length && !uploadsHistory.length && !savedUpload;
 
   function showToast(type, message) {
     setToast({ type, message });
@@ -98,7 +101,7 @@ export default function UploadAttendanceForm() {
     }
 
     if (!hasValidExcelExtension(file.name)) {
-      showToast("error", "Solo se permiten archivos .xls o .xlsx.");
+      showToast("error", "Solo se permiten archivos .xls, .xlsx, .csv o .dat.");
       return;
     }
 
@@ -126,7 +129,12 @@ export default function UploadAttendanceForm() {
     event.preventDefault();
 
     if (!selectedFile) {
-      showToast("error", "Selecciona un archivo .xls o .xlsx para continuar.");
+      showToast("error", "Selecciona un archivo biométrico para continuar.");
+      return;
+    }
+
+    if (!branchCode) {
+      showToast("error", "Selecciona la sucursal de origen del archivo.");
       return;
     }
 
@@ -136,6 +144,7 @@ export default function UploadAttendanceForm() {
       try {
         const formData = new FormData();
         formData.append("file", selectedFile);
+        formData.append("branchCode", branchCode);
 
         const request = await fetch("/api/attendance/upload", {
           method: "POST",
@@ -173,14 +182,21 @@ export default function UploadAttendanceForm() {
         }
 
         const response = await fetch("/api/attendance/upload");
+        const branchesResponse = await fetch("/api/branches");
         const payload = await response.json();
+        const branchesPayload = await branchesResponse.json();
 
         if (!response.ok) {
           throw new Error(payload.error || "No se pudo cargar el historial.");
         }
 
+        if (!branchesResponse.ok) {
+          throw new Error(branchesPayload.error || "No se pudieron cargar las sucursales.");
+        }
+
         if (!isCancelled) {
           setUploadsHistory(payload.uploads || []);
+          setBranches(branchesPayload.branches || []);
         }
       } catch (historyError) {
         if (!isCancelled) {
@@ -235,14 +251,63 @@ export default function UploadAttendanceForm() {
       ) : null}
 
       <section className={styles.panel}>
+        {isInitialLoading ? (
+          <div className={styles.loadingSkeleton} aria-busy="true" aria-label="Cargando">
+            <div className={styles.skeletonHeader}>
+              <span className={`${styles.skeletonLine} ${styles.skeletonEyebrow}`} />
+              <span className={`${styles.skeletonLine} ${styles.skeletonTitle}`} />
+              <span className={`${styles.skeletonLine} ${styles.skeletonText}`} />
+            </div>
+            <span className={`${styles.skeletonLine} ${styles.skeletonSelect}`} />
+            <div className={styles.skeletonDropzone}>
+              <span className={styles.skeletonIcon} />
+              <span className={`${styles.skeletonLine} ${styles.skeletonDropTitle}`} />
+              <span className={`${styles.skeletonLine} ${styles.skeletonDropText}`} />
+            </div>
+            <span className={`${styles.skeletonLine} ${styles.skeletonButton}`} />
+            <div className={styles.skeletonHistory}>
+              <div className={styles.skeletonHistoryHeader}>
+                <span className={`${styles.skeletonLine} ${styles.skeletonHistoryTitle}`} />
+                <span className={styles.skeletonBadge} />
+              </div>
+              {[0, 1, 2].map((item) => (
+                <div key={item} className={styles.skeletonHistoryItem}>
+                  <div>
+                    <span className={`${styles.skeletonLine} ${styles.skeletonItemTitle}`} />
+                    <span className={`${styles.skeletonLine} ${styles.skeletonItemText}`} />
+                  </div>
+                  <span className={styles.skeletonItemAction} />
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <>
         <form onSubmit={handleSubmit} className={styles.form}>
           <div className={styles.header}>
             <p className={styles.eyebrow}>Subir archivo</p>
             <h2 className={styles.title}>Guarda el reporte original del biométrico</h2>
             <p className={styles.description}>
-              Arrastra el archivo `InOutHorizontalReport` a esta zona, confirma la carga y lo guardaremos completo en la base de datos para recuperarlo y procesarlo después.
+              Arrastra el CSV de Ambato o el attlog de Salcedo, elige la sucursal de origen y guardaremos el archivo completo para procesarlo después.
             </p>
           </div>
+
+          <label className={styles.field}>
+            <span className={styles.label}>Sucursal del biométrico</span>
+            <select
+              value={branchCode}
+              onChange={(event) => setBranchCode(event.target.value)}
+              className={styles.select}
+              disabled={isUploadLocked}
+            >
+              <option value="">Selecciona una sucursal</option>
+              {branches.map((branch) => (
+                <option key={branch.id || branch.code} value={branch.code}>
+                  {branch.name || branch.code}
+                </option>
+              ))}
+            </select>
+          </label>
 
           <div
             className={`${styles.dropzone} ${isDragging ? styles.dropzoneActive : ""} ${
@@ -351,6 +416,7 @@ export default function UploadAttendanceForm() {
             <div className={styles.summaryGrid}>
               {[
                 { label: "Archivo", value: savedUpload.fileName || "N/D" },
+                { label: "Sucursal", value: savedUpload.branchName || savedUpload.branchCode || "N/D" },
                 { label: "Estado", value: formatUploadStatus(savedUpload.status) },
                 { label: "Tamaño", value: formatFileSize(savedUpload.fileSize || 0) },
                 { label: "Guardado", value: formatDateTime(savedUpload.createdAt) },
@@ -388,12 +454,14 @@ export default function UploadAttendanceForm() {
                   <div className={styles.historyItemMain}>
                     <p className={styles.historyFileName}>{upload.fileName}</p>
                     <p className={styles.historyMeta}>
-                      {formatFileSize(upload.fileSize || 0)} · {formatDateTime(upload.createdAt)}
+                      {[upload.branchName || upload.branchCode, formatFileSize(upload.fileSize || 0), formatDateTime(upload.createdAt)]
+                        .filter(Boolean)
+                        .join(" · ")}
                     </p>
                   </div>
                   <div className={styles.historyItemSide}>
                     <span className={styles.historyStatus}>{formatUploadStatus(upload.status)}</span>
-                    <Link href={planningModulePath(`/uploads/${upload.id}`)} className={styles.historyAction}>
+                    <Link href={planningModulePath(`/attendance/uploads/${upload.id}`)} className={styles.historyAction}>
                       {upload.hasNormalization ? "Abrir revisión" : "Abrir y revisar"}
                     </Link>
                   </div>
@@ -407,6 +475,8 @@ export default function UploadAttendanceForm() {
             </div>
           )}
         </div>
+          </>
+        )}
       </section>
     </>
   );

@@ -1,21 +1,21 @@
 import DashboardShell from "@/components/dashboard/DashboardShell";
-import ModuleScaffold from "@/components/dashboard/ModuleScaffold";
+import PayrollPlannedCostView from "@/components/payroll/PayrollPlannedCostView";
 
 export const metadata = {
   title: "Costo planificado | Control de Asistencia",
 };
 
-export default function PayrollPlannedCostPage() {
+export default async function PayrollPlannedCostPage({ searchParams }) {
+  const {
+    month = "",
+  } = await searchParams;
+
   return (
     <DashboardShell
       title="Costo planificado"
-      description="Página base para medir el costo laboral esperado del plan mensual."
+      description="Revisa el costo esperado del plan mensual por sucursal, area, rol y empleado."
     >
-      <ModuleScaffold
-        eyebrow="Nómina y costos"
-        title="Presupuesto del plan"
-        description="Aquí luego compararemos cuánto debería costar el mes según la planificación por sucursal, área, rol y empleado."
-      />
+      <PayrollPlannedCostView initialFilters={{ month }} mode="overview" />
     </DashboardShell>
   );
 }

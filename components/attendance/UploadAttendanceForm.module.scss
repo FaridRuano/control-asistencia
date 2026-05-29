@@ -7,6 +7,164 @@
   color: var(--text);
 }
 
+.loadingSkeleton {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.skeletonHeader {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.skeletonLine,
+.skeletonIcon,
+.skeletonBadge,
+.skeletonItemAction {
+  position: relative;
+  overflow: hidden;
+  display: block;
+  border-radius: 999px;
+  background: #edf2f7;
+
+  &::after {
+    position: absolute;
+    inset: 0;
+    content: "";
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0),
+      rgba(255, 255, 255, 0.72),
+      rgba(255, 255, 255, 0)
+    );
+    animation: skeleton-sweep 1.35s ease-in-out infinite;
+  }
+}
+
+.skeletonEyebrow {
+  width: 9rem;
+  height: 0.8rem;
+}
+
+.skeletonTitle {
+  width: min(34rem, 78%);
+  height: 2.6rem;
+  border-radius: 0.8rem;
+}
+
+.skeletonText {
+  width: min(46rem, 92%);
+  height: 1.05rem;
+}
+
+.skeletonSelect {
+  width: 100%;
+  height: 2.8rem;
+  border-radius: 0.7rem;
+}
+
+.skeletonDropzone {
+  display: grid;
+  justify-items: center;
+  gap: 0.85rem;
+  border-radius: var(--radius-card);
+  border: 1px dashed rgba(16, 33, 62, 0.12);
+  background: #fbfcff;
+  padding: 2rem 1.5rem;
+}
+
+.skeletonIcon {
+  width: 4rem;
+  height: 4rem;
+  border-radius: 1.4rem;
+}
+
+.skeletonDropTitle {
+  width: min(22rem, 72%);
+  height: 1.25rem;
+}
+
+.skeletonDropText {
+  width: min(34rem, 86%);
+  height: 0.95rem;
+}
+
+.skeletonButton {
+  width: 13rem;
+  height: 3rem;
+}
+
+.skeletonHistory {
+  display: grid;
+  gap: 0.85rem;
+  border-top: 1px solid rgba(16, 33, 62, 0.08);
+  padding-top: 1.5rem;
+}
+
+.skeletonHistoryHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.skeletonHistoryTitle {
+  width: min(18rem, 64vw);
+  height: 1.35rem;
+  border-radius: 0.5rem;
+}
+
+.skeletonBadge {
+  width: 4.2rem;
+  height: 2.1rem;
+}
+
+.skeletonHistoryItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.9rem;
+  align-items: center;
+  padding: 1rem 1.05rem;
+  border-radius: 1.1rem;
+  border: 1px solid rgba(16, 33, 62, 0.08);
+  background: #fbfcff;
+}
+
+.skeletonItemTitle {
+  width: min(24rem, 68vw);
+  height: 1rem;
+  border-radius: 0.5rem;
+}
+
+.skeletonItemText {
+  width: min(18rem, 52vw);
+  height: 0.85rem;
+  margin-top: 0.55rem;
+  border-radius: 0.45rem;
+}
+
+.skeletonItemAction {
+  width: 8.5rem;
+  height: 2.1rem;
+}
+
+@media (max-width: 640px) {
+  .skeletonHistoryHeader,
+  .skeletonHistoryItem {
+    grid-template-columns: 1fr;
+  }
+
+  .skeletonHistoryHeader {
+    display: grid;
+  }
+
+  .skeletonBadge,
+  .skeletonItemAction {
+    width: 7rem;
+  }
+}
+
 .toast {
   position: fixed;
   top: 1.2rem;
@@ -121,6 +279,34 @@
   line-height: 1.75;
   font-size: var(--font-size-lg);
   max-width: 58rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.label {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+}
+
+.select {
+  width: 100%;
+  min-height: 2.8rem;
+  border: 1px solid var(--border);
+  border-radius: 0.7rem;
+  background: white;
+  color: var(--text);
+  font: inherit;
+  padding: 0 0.85rem;
+
+  &:disabled {
+    color: var(--text-muted);
+    background: #f8fafc;
+  }
 }
 
 .dropzone {
@@ -451,5 +637,11 @@
   100% {
     opacity: 1;
     transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes skeleton-sweep {
+  100% {
+    transform: translateX(100%);
   }
 }

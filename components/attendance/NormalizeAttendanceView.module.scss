@@ -10,15 +10,21 @@
 .blockingOverlay {
   position: fixed;
   inset: 0;
-  z-index: 120;
-  display: grid;
-  place-items: center;
+  width: 100vw;
+  height: 100dvh;
+  z-index: 9999;
+  display: block;
   padding: 1.5rem;
   background: rgba(7, 16, 33, 0.46);
   backdrop-filter: blur(5px);
+  overflow: hidden;
 }
 
 .blockingCard {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   width: min(32rem, calc(100vw - 2rem));
   display: grid;
   justify-items: center;

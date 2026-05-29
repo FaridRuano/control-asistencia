@@ -5,7 +5,7 @@ const attendancePunchSchema = new Schema(
     upload: {
       type: Schema.Types.ObjectId,
       ref: "AttendanceUpload",
-      required: true,
+      default: null,
     },
     employee: {
       type: Schema.Types.ObjectId,
@@ -18,8 +18,18 @@ const attendancePunchSchema = new Schema(
     },
     rawValue: {
       type: String,
-      required: true,
       trim: true,
+      default: "",
+    },
+    source: {
+      type: String,
+      enum: ["upload", "manual"],
+      default: "upload",
+    },
+    note: {
+      type: String,
+      trim: true,
+      default: "",
     },
   },
   {

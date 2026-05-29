@@ -21,6 +21,7 @@ const DEFAULT_RULES = {
   paidVacationAsWorkday: true,
   vacationIncludesSupplementaryHour: false,
   areaLunchRules: [],
+  roleLunchRules: [],
   notes: "",
 };
 
@@ -47,6 +48,13 @@ function buildComparableRules(value) {
       areaName: String(rule?.areaName || "").trim(),
       lunchDurationMinutes: toNumber(rule?.lunchDurationMinutes),
     })),
+    roleLunchRules: (value?.roleLunchRules || []).map((rule) => ({
+      areaCode: String(rule?.areaCode || "").trim(),
+      areaName: String(rule?.areaName || "").trim(),
+      roleCode: String(rule?.roleCode || "").trim(),
+      roleName: String(rule?.roleName || "").trim(),
+      lunchDurationMinutes: toNumber(rule?.lunchDurationMinutes),
+    })),
     notes: String(value?.notes || "").trim(),
   };
 }
@@ -59,6 +67,7 @@ export default function LaborRulesManager() {
   const [rules, setRules] = useState(DEFAULT_RULES);
   const [savedRulesSignature, setSavedRulesSignature] = useState("");
   const [areas, setAreas] = useState([]);
+  const [roles, setRoles] = useState([]);
   const [source, setSource] = useState("default");
   const [notice, setNotice] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -156,18 +165,60 @@ export default function LaborRulesManager() {
     });
   }
 
+  function updateRoleLunchRule(index, updates) {
+    setRules((current) => ({
+      ...current,
+      roleLunchRules: current.roleLunchRules.map((rule, ruleIndex) =>
+        ruleIndex === index ? { ...rule, ...updates } : rule,
+      ),
+    }));
+  }
+
+  function addRoleLunchRule() {
+    setRules((current) => ({
+      ...current,
+      roleLunchRules: [
+        ...current.roleLunchRules,
+        { areaCode: "", areaName: "", roleCode: "", roleName: "", lunchDurationMinutes: 60 },
+      ],
+    }));
+  }
+
+  function removeRoleLunchRule(index) {
+    setRules((current) => ({
+      ...current,
+      roleLunchRules: current.roleLunchRules.filter((_, ruleIndex) => ruleIndex !== index),
+    }));
+  }
+
+  function handleRoleLunchSelection(index, roleKey) {
+    const [areaCode = "", roleCode = ""] = roleKey.split("|");
+    const selectedRole = roles.find(
+      (role) => role.areaCode === areaCode && role.code === roleCode,
+    );
+
+    updateRoleLunchRule(index, {
+      areaCode,
+      areaName: selectedRole?.areaName || "",
+      roleCode,
+      roleName: selectedRole?.name || "",
+    });
+  }
+
   useEffect(() => {
     let isCancelled = false;
 
     async function loadData() {
       try {
-        const [rulesResponse, areasResponse] = await Promise.all([
+        const [rulesResponse, areasResponse, rolesResponse] = await Promise.all([
           fetch("/api/planning/labor-rules"),
           fetch("/api/areas"),
+          fetch("/api/roles"),
         ]);
-        const [rulesPayload, areasPayload] = await Promise.all([
+        const [rulesPayload, areasPayload, rolesPayload] = await Promise.all([
           rulesResponse.json(),
           areasResponse.json(),
+          rolesResponse.json(),
         ]);
 
         if (!rulesResponse.ok) {
@@ -178,19 +229,30 @@ export default function LaborRulesManager() {
           throw new Error(areasPayload.error || "No se pudieron cargar las areas.");
         }
 
+        if (!rolesResponse.ok) {
+          throw new Error(rolesPayload.error || "No se pudieron cargar los roles.");
+        }
+
         if (!isCancelled) {
           const knownAreaCodes = new Set((areasPayload.areas || []).map((area) => area.code));
+          const knownRoleKeys = new Set(
+            (rolesPayload.roles || []).map((role) => `${role.areaCode}|${role.code}`),
+          );
           const loadedRules = {
             ...DEFAULT_RULES,
             ...(rulesPayload.rules || {}),
             areaLunchRules: (rulesPayload.rules?.areaLunchRules || []).filter((rule) =>
               knownAreaCodes.has(rule.areaCode),
             ),
+            roleLunchRules: (rulesPayload.rules?.roleLunchRules || []).filter((rule) =>
+              knownRoleKeys.has(`${rule.areaCode}|${rule.roleCode}`),
+            ),
           };
 
           setRules(loadedRules);
           setSavedRulesSignature(buildRulesSignature(loadedRules));
           setAreas(areasPayload.areas || []);
+          setRoles(rolesPayload.roles || []);
           setSource(rulesPayload.source || "default");
         }
       } catch (error) {
@@ -401,6 +463,63 @@ export default function LaborRulesManager() {
                 <input type="number" min="0" value={rule.lunchDurationMinutes} onChange={(event) => updateLunchRule(index, { lunchDurationMinutes: event.target.value })} />
               </label>
               <button type="button" className={styles.iconButton} onClick={() => removeLunchRule(index)} aria-label="Eliminar regla de almuerzo" title="Eliminar regla">
+                <Trash2 size={16} />
+              </button>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className={styles.panel}>
+        <div className={styles.panelHeader}>
+          <div>
+            <p className={styles.eyebrow}>Almuerzos por rol</p>
+            <h2 className={styles.title}>Excepciones al area</h2>
+            <p className={styles.description}>
+              Usa esto cuando un rol pertenece al area, pero maneja otro tiempo de almuerzo.
+            </p>
+          </div>
+          <button type="button" className={styles.ghostButton} onClick={addRoleLunchRule}>
+            <Plus size={16} />
+            Agregar rol
+          </button>
+        </div>
+
+        <div className={styles.lunchRows}>
+          {rules.roleLunchRules.map((rule, index) => (
+            <div key={`${rule.areaCode}-${rule.roleCode}-${index}`} className={styles.lunchRow}>
+              <label className={styles.field}>
+                <span>Rol</span>
+                <select
+                  value={rule.areaCode && rule.roleCode ? `${rule.areaCode}|${rule.roleCode}` : ""}
+                  onChange={(event) => handleRoleLunchSelection(index, event.target.value)}
+                >
+                  <option value="">Seleccionar rol</option>
+                  {roles.map((role) => (
+                    <option key={`${role.areaCode}-${role.code}`} value={`${role.areaCode}|${role.code}`}>
+                      {role.areaName} · {role.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className={styles.field}>
+                <span>Almuerzo (min)</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={rule.lunchDurationMinutes}
+                  onChange={(event) =>
+                    updateRoleLunchRule(index, { lunchDurationMinutes: event.target.value })
+                  }
+                />
+              </label>
+              <button
+                type="button"
+                className={styles.iconButton}
+                onClick={() => removeRoleLunchRule(index)}
+                aria-label="Eliminar excepcion de almuerzo por rol"
+                title="Eliminar regla"
+              >
                 <Trash2 size={16} />
               </button>
             </div>

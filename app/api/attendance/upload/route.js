@@ -3,8 +3,9 @@ import { NextResponse } from "next/server";
 import { isAuthenticated } from "@/lib/auth";
 import connectToDatabase from "@/lib/db/mongodb";
 import AttendanceUpload from "@/models/AttendanceUpload";
+import Branch from "@/models/Branch";
 
-const ACCEPTED_EXTENSIONS = [".xls", ".xlsx"];
+const ACCEPTED_EXTENSIONS = [".xls", ".xlsx", ".csv", ".dat"];
 
 function hasValidExcelExtension(fileName) {
   const normalizedName = String(fileName || "").toLowerCase();
@@ -37,6 +38,8 @@ export async function GET() {
         fileName: upload.fileName,
         mimeType: upload.mimeType,
         fileSize: upload.fileSize,
+        branchCode: upload.branchCode || "",
+        branchName: upload.branchName || "",
         status: upload.status,
         month: upload.month,
         year: upload.year,
@@ -66,17 +69,34 @@ export async function POST(request) {
 
     const formData = await request.formData();
     const file = formData.get("file");
+    const branchCode = String(formData.get("branchCode") || "").trim().toUpperCase();
 
     if (!file || typeof file.arrayBuffer !== "function") {
       return NextResponse.json(
-        { error: "Debes adjuntar un archivo Excel válido." },
+        { error: "Debes adjuntar un archivo biométrico válido." },
         { status: 400 },
       );
     }
 
     if (!hasValidExcelExtension(file.name)) {
       return NextResponse.json(
-        { error: "Solo se permiten archivos .xls o .xlsx." },
+        { error: "Solo se permiten archivos .xls, .xlsx, .csv o .dat." },
+        { status: 400 },
+      );
+    }
+
+    if (!branchCode) {
+      return NextResponse.json(
+        { error: "Selecciona la sucursal de origen del biométrico." },
+        { status: 400 },
+      );
+    }
+
+    const branch = await Branch.findOne({ code: branchCode }).lean();
+
+    if (!branch) {
+      return NextResponse.json(
+        { error: "La sucursal seleccionada no existe." },
         { status: 400 },
       );
     }
@@ -95,6 +115,8 @@ export async function POST(request) {
       mimeType: file.type || "application/octet-stream",
       fileSize: originalFile.length,
       originalFile,
+      branchCode,
+      branchName: branch.name || branchCode,
       status: "uploaded",
     });
 
@@ -105,6 +127,8 @@ export async function POST(request) {
         fileName: uploadDocument.fileName,
         mimeType: uploadDocument.mimeType,
         fileSize: uploadDocument.fileSize,
+        branchCode: uploadDocument.branchCode,
+        branchName: uploadDocument.branchName,
         status: uploadDocument.status,
         normalizedAt: null,
         hasNormalization: false,

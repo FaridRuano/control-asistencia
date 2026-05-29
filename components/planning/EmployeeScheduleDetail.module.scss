@@ -1,0 +1,62 @@
+.stack { display: grid; gap: 1rem; min-width: 0; }
+.toolbar, .weekCard, .emptyState, .loading, .loadingPanel { border: 1px solid rgba(16, 33, 62, 0.08); border-radius: 1.2rem; background: rgba(255, 255, 255, 0.96); box-shadow: var(--shadow-soft); }
+.toolbar { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(150px, 190px) auto; gap: 1rem; align-items: end; padding: 1rem; }
+.backLink { display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem; border: 1px solid rgba(16, 33, 62, 0.12); border-radius: 999px; background: white; color: #16325f; padding: 0.75rem 0.95rem; text-decoration: none; font-weight: 800; white-space: nowrap; }
+.identity { min-width: 0; }
+.eyebrow { margin: 0; color: var(--primary); font-size: var(--font-size-micro); letter-spacing: 0.18em; text-transform: uppercase; }
+.identity h2 { margin: 0.25rem 0 0; color: #10213e; font-size: var(--font-size-title-md); overflow-wrap: anywhere; }
+.identity span { display: block; margin-top: 0.35rem; color: #61718d; line-height: 1.45; }
+.monthField { display: grid; gap: 0.4rem; color: #1c315d; font-weight: 700; }
+.monthField input, .templateField select { width: 100%; border: 1px solid rgba(16, 33, 62, 0.12); border-radius: 0.85rem; background: white; color: var(--text); padding: 0.68rem 0.75rem; outline: none; }
+.saveButton { display: inline-flex; min-height: 2.75rem; align-items: center; justify-content: center; gap: 0.45rem; border: 0; border-radius: 999px; background: linear-gradient(135deg, var(--primary), var(--primary-strong)); color: white; padding: 0.72rem 1rem; font-weight: 800; cursor: pointer; white-space: nowrap; }
+.saveButton:disabled { opacity: 0.6; cursor: not-allowed; }
+.weekGrid { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr); }
+.weekCard { display: grid; gap: 0.85rem; padding: 1rem; min-width: 0; }
+.weekHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.8rem; border-bottom: 1px solid #e8eef8; padding-bottom: 0.75rem; }
+.weekHeader div { min-width: 0; }
+.weekHeader p { margin: 0; color: var(--primary); font-size: var(--font-size-xs); font-weight: 800; text-transform: uppercase; }
+.weekHeader h3 { margin: 0.25rem 0 0; color: #10213e; font-size: var(--font-size-title-xs); }
+.weekHeader span { max-width: 58%; border-radius: 999px; background: #eef5ff; color: #17428c; padding: 0.34rem 0.55rem; font-size: var(--font-size-micro); font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.templateField { display: grid; gap: 0.4rem; color: #1c315d; font-weight: 700; font-size: var(--font-size-sm); min-width: 0; }
+.dayList { display: grid; gap: 0.55rem; }
+.dayRow { display: grid; grid-template-columns: 5.6rem minmax(0, 1fr); gap: 0.75rem; align-items: center; border: 1px solid #edf2fa; border-radius: 0.85rem; padding: 0.7rem; min-width: 0; }
+.dayRowMissing { border-color: #e5e7eb; background: #f3f4f6; opacity: 0.72; }
+.dayRow strong, .dayRow span { display: block; }
+.dayRow strong { color: #10213e; font-size: var(--font-size-sm); }
+.dayRow span { color: #7888a1; font-size: var(--font-size-xs); margin-top: 0.12rem; }
+.dayRowMissing strong { color: #6b7280; }
+.dayRowMissing span { color: #9ca3af; }
+.dayRow p { margin: 0; border-radius: 0.75rem; padding: 0.55rem 0.65rem; font-weight: 700; line-height: 1.45; overflow-wrap: anywhere; }
+.weekEmpty { display: flex; align-items: center; gap: 0.5rem; border: 1px dashed #d8e2f1; border-radius: 0.85rem; color: #61718d; padding: 0.75rem; font-weight: 700; }
+.toneWork { background: #eef7ff; color: #17428c; }
+.toneExtra { background: #fff4e5; color: #8a5600; }
+.toneHoliday { background: #f0f7ef; color: #276749; }
+.toneOff { background: #f4f7fc; color: #52657f; }
+.toneMissing { background: #e5e7eb; color: #6b7280; }
+.emptyState, .loading { display: flex; align-items: center; gap: 0.6rem; padding: 1rem; color: #425b80; font-weight: 800; }
+.emptyState p { margin: 0; }
+.loadingPanel { display: grid; gap: 1rem; padding: 1rem; overflow: hidden; }
+.skeletonToolbar { display: grid; grid-template-columns: minmax(5.8rem, 8rem) minmax(0, 1fr) minmax(9rem, 12rem) minmax(8rem, 11rem); gap: 1rem; align-items: end; }
+.skeletonGrid { display: grid; gap: 0.85rem; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.skeletonCard { display: grid; gap: 0.7rem; border: 1px solid #edf2fa; border-radius: 1rem; padding: 0.9rem; }
+.skeletonBack, .skeletonIdentity, .skeletonMonth, .skeletonSave, .skeletonTitle, .skeletonSelect, .skeletonLine, .skeletonLineShort { display: block; border-radius: 999px; background: linear-gradient(90deg, #eef3fb 0%, #f8fbff 45%, #eef3fb 100%); background-size: 220% 100%; animation: skeleton-shimmer 1.25s ease-in-out infinite; }
+.skeletonBack, .skeletonMonth, .skeletonSave { height: 2.75rem; }
+.skeletonIdentity { height: 3.4rem; border-radius: 1rem; }
+.skeletonTitle { width: 56%; height: 0.9rem; }
+.skeletonSelect { height: 2.5rem; border-radius: 0.85rem; }
+.skeletonLine { height: 2.2rem; border-radius: 0.8rem; }
+.skeletonLineShort { width: 74%; height: 2.2rem; border-radius: 0.8rem; }
+@keyframes skeleton-shimmer {
+  0% { background-position: 120% 0; }
+  100% { background-position: -120% 0; }
+}
+@media (max-width: 720px) {
+  .toolbar { grid-template-columns: 1fr; align-items: stretch; padding: 0.85rem; }
+  .backLink, .saveButton { width: 100%; }
+  .weekCard { padding: 0.85rem; }
+  .weekHeader { display: grid; }
+  .weekHeader span { max-width: 100%; width: fit-content; }
+  .dayRow { grid-template-columns: 1fr; gap: 0.45rem; }
+  .skeletonToolbar { grid-template-columns: 1fr; gap: 0.7rem; }
+  .skeletonGrid { grid-template-columns: 1fr; }
+}

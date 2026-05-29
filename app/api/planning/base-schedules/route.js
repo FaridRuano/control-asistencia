@@ -19,7 +19,7 @@ export async function GET() {
 
   await connectToDatabase();
 
-  const templates = await BaseScheduleTemplate.find({})
+  const templates = await BaseScheduleTemplate.find({ isActive: { $ne: false } })
     .sort({ areaName: 1, roleName: 1, name: 1 })
     .lean();
 

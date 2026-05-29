@@ -1,0 +1,233 @@
+.panel {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.toolbar,
+.tableShell,
+.errorBox,
+.loadingScene {
+  border: 1px solid rgba(16, 33, 62, 0.08);
+  border-radius: var(--radius-panel);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--shadow-panel);
+}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  align-items: end;
+  padding: 1rem;
+}
+
+.toolbar label {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.toolbar label span {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 800;
+}
+
+.toolbar input {
+  width: 100%;
+  min-height: 2.55rem;
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+  background: white;
+  color: var(--text);
+  font: inherit;
+  padding: 0 0.75rem;
+}
+
+.closedBadge,
+.secondaryButton,
+.saveButton {
+  min-height: 2.55rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  border-radius: 999px;
+  padding: 0 1rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.closedBadge {
+  background: #f2f4f7;
+  color: #475467;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  align-items: center;
+  min-width: 0;
+}
+
+.secondaryButton,
+.saveButton {
+  width: 12rem;
+  flex: 0 0 12rem;
+}
+
+.secondaryButton {
+  border: 1px solid rgba(16, 33, 62, 0.12);
+  background: white;
+  color: #10213e;
+  cursor: pointer;
+}
+
+.saveButton {
+  border: 0;
+  background: #10213e;
+  color: white;
+  cursor: pointer;
+}
+
+.secondaryButton:disabled,
+.saveButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.tableShell {
+  overflow: hidden;
+}
+
+.tableScroller {
+  overflow-x: auto;
+}
+
+.tableScroller table {
+  width: 100%;
+  min-width: 820px;
+  border-collapse: collapse;
+}
+
+.tableScroller th,
+.tableScroller td {
+  padding: 0.68rem 0.8rem;
+  border-bottom: 1px solid rgba(16, 33, 62, 0.08);
+  text-align: left;
+  vertical-align: top;
+}
+
+.tableScroller th {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 900;
+}
+
+.tableScroller td strong,
+.tableScroller td span {
+  display: block;
+}
+
+.tableScroller td > span {
+  margin-top: 0.18rem;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.tableScroller td:not(:first-child) strong {
+  color: #10213e;
+  font-size: 0.92rem;
+  font-weight: 950;
+}
+
+.metricColumn {
+  display: grid;
+  gap: 0.26rem;
+  min-width: 0;
+}
+
+.metricColumn span {
+  display: grid;
+  grid-template-columns: minmax(4.8rem, 1fr) auto;
+  gap: 0.45rem;
+  align-items: center;
+  border-radius: 0.58rem;
+  border: 1px solid rgba(16, 33, 62, 0.08);
+  background: #f7f9fc;
+  color: #263446;
+  padding: 0.28rem 0.42rem;
+}
+
+.metricColumn small {
+  color: inherit;
+  font-size: 0.68rem;
+  font-weight: 800;
+  opacity: 0.72;
+}
+
+.metricColumn strong {
+  font-size: 0.8rem;
+  font-weight: 900;
+  text-align: right;
+}
+
+.emptyCell {
+  color: var(--text-muted);
+  font-weight: 800;
+  text-align: center !important;
+}
+
+.errorBox {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.9rem 1rem;
+  color: #b42318;
+  font-weight: 800;
+}
+
+.loadingScene {
+  display: grid;
+  gap: 0.65rem;
+  padding: 1rem;
+}
+
+.loadingScene span {
+  display: block;
+  height: 3rem;
+  border-radius: 0.9rem;
+  background: linear-gradient(90deg, #edf3fb 0%, #f9fbff 45%, #edf3fb 100%);
+  background-size: 220% 100%;
+  animation: closure-skeleton 1.25s ease-in-out infinite;
+}
+
+@media (max-width: 780px) {
+  .toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .secondaryButton,
+  .saveButton {
+    width: 100%;
+    flex-basis: auto;
+  }
+}
+
+@keyframes closure-skeleton {
+  0% {
+    background-position: 120% 0;
+  }
+
+  100% {
+    background-position: -120% 0;
+  }
+}

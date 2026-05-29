@@ -152,10 +152,11 @@ employeeSchema.index(
 );
 
 employeeSchema.index(
-  { biometricCode: 1 },
+  { branchCode: 1, biometricCode: 1 },
   {
     unique: true,
     partialFilterExpression: {
+      branchCode: { $type: "string", $gt: "" },
       biometricCode: { $type: "string", $gt: "" },
     },
   },

@@ -1,19 +1,9 @@
-import DashboardShell from "@/components/dashboard/DashboardShell";
-import NormalizeAttendanceView from "@/components/attendance/NormalizeAttendanceView";
+import { redirect } from "next/navigation";
 
-export const metadata = {
-  title: "Normalizar carga | Control de Asistencia",
-};
+import { planningModulePath } from "@/lib/modules/planning/routes";
 
 export default async function UploadNormalizationPage({ params }) {
   const { id } = await params;
 
-  return (
-    <DashboardShell
-      title="Normalización de carga"
-      description="Recupera un archivo ya guardado, procésalo de nuevo y revisa los empleados detectados junto con sus picadas antes de continuar con reglas de negocio."
-    >
-      <NormalizeAttendanceView uploadId={id} />
-    </DashboardShell>
-  );
+  redirect(planningModulePath(`/attendance/uploads/${id}`));
 }

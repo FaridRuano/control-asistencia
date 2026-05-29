@@ -52,6 +52,48 @@ const generatedDaySchema = new Schema(
   { _id: false },
 );
 
+const weeklyPlanSchema = new Schema(
+  {
+    weekStartKey: {
+      type: String,
+      trim: true,
+      required: true,
+    },
+    label: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    template: {
+      type: Schema.Types.ObjectId,
+      ref: "BaseScheduleTemplate",
+      required: true,
+    },
+    templateName: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      default: "",
+    },
+    rotationGroup: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    variantType: {
+      type: String,
+      enum: ["base", "sabado", "domingo", "sabado_domingo", "custom"],
+      default: "custom",
+    },
+    startTime: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+  },
+  { _id: false },
+);
+
 const scheduleAssignmentSchema = new Schema(
   {
     monthKey: {
@@ -127,6 +169,10 @@ const scheduleAssignmentSchema = new Schema(
     },
     generatedDays: {
       type: [generatedDaySchema],
+      default: [],
+    },
+    weeklyPlan: {
+      type: [weeklyPlanSchema],
       default: [],
     },
     notes: {

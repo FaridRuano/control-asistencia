@@ -1,7 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { AlertCircle, CheckCircle2, Copy, Edit3, Plus, Save, Trash2, X } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  Copy,
+  Edit3,
+  Filter,
+  Plus,
+  RotateCcw,
+  Save,
+  Trash2,
+  X,
+} from "lucide-react";
 
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import FloatingNotice from "@/components/ui/FloatingNotice";
@@ -27,6 +38,7 @@ const DEFAULT_RULES = {
   maxSupplementaryMinutesPerWeek: 300,
   defaultGraceMinutes: 10,
   areaLunchRules: [],
+  roleLunchRules: [],
 };
 const MANDATORY_WEEKLY_REST_DAYS = 2;
 
@@ -137,6 +149,7 @@ export default function BaseSchedulesManager() {
   const [templates, setTemplates] = useState([]);
   const [areas, setAreas] = useState([]);
   const [roles, setRoles] = useState([]);
+  const [templateFilters, setTemplateFilters] = useState({ areaCode: "", roleKey: "" });
   const [rules, setRules] = useState(DEFAULT_RULES);
   const [form, setForm] = useState({ ...EMPTY_FORM, weeklyRows: cloneRows(DEFAULT_TEMPLATE_ROWS) });
   const [savedFormSignature, setSavedFormSignature] = useState("");
@@ -157,6 +170,29 @@ export default function BaseSchedulesManager() {
   const rolesForArea = useMemo(
     () => roles.filter((role) => !form.areaCode || role.areaCode === form.areaCode),
     [form.areaCode, roles],
+  );
+  const rolesForTemplateFilter = useMemo(
+    () => roles.filter((role) => !templateFilters.areaCode || role.areaCode === templateFilters.areaCode),
+    [roles, templateFilters.areaCode],
+  );
+
+  const filteredTemplates = useMemo(
+    () =>
+      templates.filter((template) => {
+        if (templateFilters.areaCode && template.areaCode !== templateFilters.areaCode) {
+          return false;
+        }
+
+        if (
+          templateFilters.roleKey
+          && `${template.areaCode}|${template.roleCode}` !== templateFilters.roleKey
+        ) {
+          return false;
+        }
+
+        return true;
+      }),
+    [templateFilters.areaCode, templateFilters.roleKey, templates],
   );
 
   const validation = useMemo(() => {
@@ -241,7 +277,7 @@ export default function BaseSchedulesManager() {
   const templatesByArea = useMemo(() => {
     const grouped = new Map();
 
-    templates.forEach((template) => {
+    filteredTemplates.forEach((template) => {
       const key = template.areaName || "Sin area";
 
       if (!grouped.has(key)) {
@@ -252,7 +288,7 @@ export default function BaseSchedulesManager() {
     });
 
     return [...grouped.entries()];
-  }, [templates]);
+  }, [filteredTemplates]);
 
   const clearNoticeTimers = useCallback(() => {
     if (noticeExitTimeoutRef.current) {
@@ -324,8 +360,42 @@ export default function BaseSchedulesManager() {
     });
   }
 
+  function applyRoleLunchToRows(areaCode, roleCode, rows) {
+    const roleRule = (rules.roleLunchRules || []).find((item) =>
+      item.areaCode === areaCode && item.roleCode === roleCode,
+    );
+
+    if (!roleRule) {
+      return rows;
+    }
+
+    const lunchDurationMinutes = Number(roleRule.lunchDurationMinutes) || 0;
+
+    return rows.map((row) => {
+      const type = DAY_TYPES.find((item) => item.value === row.dayType);
+
+      if (!type?.isWorkingDay) {
+        return row;
+      }
+
+      return {
+        ...row,
+        hasLunch: lunchDurationMinutes > 0,
+        lunchDurationMinutes,
+      };
+    });
+  }
+
   function updateField(name, value) {
     setForm((current) => {
+      if (name === "roleCode") {
+        return {
+          ...current,
+          roleCode: value,
+          weeklyRows: applyRoleLunchToRows(current.areaCode, value, current.weeklyRows),
+        };
+      }
+
       if (name !== "areaCode") {
         return { ...current, [name]: value };
       }
@@ -337,6 +407,25 @@ export default function BaseSchedulesManager() {
         weeklyRows: applyAreaLunchToRows(value, current.weeklyRows),
       };
     });
+  }
+
+  function updateTemplateFilter(name, value) {
+    setTemplateFilters((current) => {
+      if (name === "areaCode") {
+        const selectedRole = roles.find((role) => `${role.areaCode}|${role.code}` === current.roleKey);
+
+        return {
+          areaCode: value,
+          roleKey: selectedRole?.areaCode === value ? current.roleKey : "",
+        };
+      }
+
+      return { ...current, [name]: value };
+    });
+  }
+
+  function clearTemplateFilters() {
+    setTemplateFilters({ areaCode: "", roleKey: "" });
   }
 
   function updateRow(dayOfWeek, updates) {
@@ -687,6 +776,45 @@ export default function BaseSchedulesManager() {
           </div>
         </div>
 
+        <div className={styles.filterBar}>
+          <div className={styles.filterTitle}>
+            <Filter size={16} />
+            <span>{filteredTemplates.length} de {templates.length} plantillas</span>
+          </div>
+          <div className={styles.filterControls}>
+            <label className={styles.compactField}>
+              <span>Area</span>
+              <select
+                value={templateFilters.areaCode}
+                onChange={(event) => updateTemplateFilter("areaCode", event.target.value)}
+              >
+                <option value="">Todas</option>
+                {areas.map((area) => (
+                  <option key={area.code} value={area.code}>{area.name}</option>
+                ))}
+              </select>
+            </label>
+            <label className={styles.compactField}>
+              <span>Rol</span>
+              <select
+                value={templateFilters.roleKey}
+                onChange={(event) => updateTemplateFilter("roleKey", event.target.value)}
+              >
+                <option value="">Todos</option>
+                {rolesForTemplateFilter.map((role) => (
+                  <option key={`${role.areaCode}-${role.code}`} value={`${role.areaCode}|${role.code}`}>
+                    {role.areaName} · {role.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button type="button" className={styles.ghostButton} onClick={clearTemplateFilters}>
+              <RotateCcw size={16} />
+              Limpiar
+            </button>
+          </div>
+        </div>
+
         <div className={styles.templateGroups}>
           {templatesByArea.map(([areaName, areaTemplates]) => (
             <div key={areaName} className={styles.group}>
@@ -718,6 +846,11 @@ export default function BaseSchedulesManager() {
           {!templates.length ? (
             <div className={styles.emptyState}>
               Todavia no hay plantillas. Crea la primera para empezar a modelar los turnos por area y rol.
+            </div>
+          ) : null}
+          {templates.length && !filteredTemplates.length ? (
+            <div className={styles.emptyState}>
+              No hay plantillas con esos filtros.
             </div>
           ) : null}
         </div>

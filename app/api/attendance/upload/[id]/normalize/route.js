@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 
 import { isAuthenticated } from "@/lib/auth";
 import parseAttendanceFile from "@/lib/attendance/parseAttendanceFile";
+import {
+  buildPublishMessage,
+  publishAttendancePunches,
+} from "@/lib/attendance/publishAttendancePunches";
 import connectToDatabase from "@/lib/db/mongodb";
 import AttendanceUpload from "@/models/AttendanceUpload";
 
@@ -22,13 +26,27 @@ function normalizeStoredFileToBuffer(value) {
 }
 
 function buildNormalizedPayload(upload, normalizedSnapshot, source) {
+  const publishSummary = upload.punchesPublishedAt
+    ? {
+        publishedAt: upload.punchesPublishedAt,
+        publishedEmployees: upload.publishedEmployees || 0,
+        publishedPunches: upload.publishedPunches || 0,
+        skippedDuplicatePunches: upload.skippedDuplicatePunches || 0,
+        skippedUnmatchedEmployees: upload.skippedUnmatchedEmployees || 0,
+        skippedUnmatchedPunches: upload.skippedUnmatchedPunches || 0,
+      }
+    : null;
+
   return {
     upload: {
       id: upload._id.toString(),
       fileName: upload.fileName,
+      branchCode: upload.branchCode || "",
+      branchName: upload.branchName || "",
       createdAt: upload.createdAt,
       status: upload.status,
       normalizedAt: upload.normalizedAt,
+      punchesPublishedAt: upload.punchesPublishedAt || null,
     },
     summary: {
       totalEmployees: normalizedSnapshot.summary.totalEmployees,
@@ -38,6 +56,7 @@ function buildNormalizedPayload(upload, normalizedSnapshot, source) {
     },
     employees: normalizedSnapshot.employees,
     parserLogs: normalizedSnapshot.parserLogs,
+    publishSummary,
     source,
   };
 }
@@ -53,6 +72,8 @@ function buildNormalizedSnapshot(parsedFile) {
     employees: parsedFile.employees.map((employee) => ({
       biometricCode: employee.biometricCode,
       fullName: employee.name,
+      branchCode: parsedFile.branchCode || "",
+      branchName: parsedFile.branchName || "",
       department: employee.department,
       punchCount: employee.punches.length,
       punches: employee.punches.map((punch) => ({
@@ -105,6 +126,8 @@ export async function GET(_request, context) {
     const parsedFile = parseAttendanceFile({
       buffer: originalFileBuffer,
       fileName: upload.fileName,
+      branchCode: upload.branchCode || "",
+      branchName: upload.branchName || "",
     });
 
     return NextResponse.json(
@@ -155,15 +178,26 @@ export async function POST(_request, context) {
     const parsedFile = parseAttendanceFile({
       buffer: originalFileBuffer,
       fileName: upload.fileName,
+      branchCode: upload.branchCode || "",
+      branchName: upload.branchName || "",
     });
 
     upload.normalizedSnapshot = buildNormalizedSnapshot(parsedFile);
     upload.normalizedAt = new Date();
+    upload.punchesPublishedAt = null;
+    upload.publishedEmployees = 0;
+    upload.publishedPunches = 0;
+    upload.skippedDuplicatePunches = 0;
+    upload.skippedUnmatchedEmployees = 0;
+    upload.skippedUnmatchedPunches = 0;
     await upload.save();
 
+    const publishResult = await publishAttendancePunches(upload);
+
     return NextResponse.json({
-      message: "Normalización guardada correctamente.",
       ...buildNormalizedPayload(upload, upload.normalizedSnapshot, "saved"),
+      message: `Normalización guardada. ${buildPublishMessage(publishResult)}`,
+      publishSummary: publishResult,
     });
   } catch (error) {
     console.error("attendance-normalize-save-error", error);

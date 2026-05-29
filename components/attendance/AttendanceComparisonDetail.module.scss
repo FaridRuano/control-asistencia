@@ -1,0 +1,273 @@
+.panel {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.topbar,
+.identity,
+.tableShell,
+.errorBox,
+.loadingScene {
+  border: 1px solid rgba(16, 33, 62, 0.08);
+  border-radius: var(--radius-panel);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--shadow-panel);
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: end;
+  padding: 1rem;
+}
+
+.backLink {
+  min-height: 2.55rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  border-radius: 999px;
+  background: #edf4ff;
+  color: #1550a0;
+  font-weight: 900;
+  padding: 0 1rem;
+  text-decoration: none;
+}
+
+.monthControl {
+  display: grid;
+  gap: 0.35rem;
+  min-width: min(15rem, 100%);
+}
+
+.monthControl span {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 800;
+}
+
+.monthControl input {
+  width: 100%;
+  min-height: 2.55rem;
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+  background: white;
+  color: var(--text);
+  font: inherit;
+  padding: 0 0.75rem;
+}
+
+.identity {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  padding: 1rem;
+}
+
+.identity strong {
+  display: block;
+  font-size: 1.05rem;
+}
+
+.identity span {
+  display: block;
+  margin-top: 0.22rem;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.summaryLine,
+.punchList,
+.extraList,
+.tagList {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.summaryLine span,
+.punchList span,
+.extraList span,
+.tagList span {
+  width: fit-content;
+  border-radius: 999px;
+  background: #edf4ff;
+  color: #1550a0;
+  padding: 0.32rem 0.55rem;
+  font-size: var(--font-size-sm);
+  font-weight: 800;
+}
+
+.tagList span {
+  background: #fff4ed;
+  color: #b54708;
+}
+
+.extraList {
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: start;
+}
+
+.tableShell {
+  overflow: hidden;
+}
+
+.tableScroller {
+  overflow-x: auto;
+}
+
+.tableScroller table {
+  width: 100%;
+  min-width: 1180px;
+  border-collapse: collapse;
+}
+
+.tableScroller th,
+.tableScroller td {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid rgba(16, 33, 62, 0.08);
+  text-align: left;
+  vertical-align: top;
+}
+
+.tableScroller th {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 900;
+}
+
+.tableScroller td strong,
+.tableScroller td span {
+  display: block;
+}
+
+.tableScroller td > span {
+  margin-top: 0.18rem;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.timelineCell {
+  display: grid;
+  gap: 0.45rem;
+  min-width: 23rem;
+}
+
+.scheduleLine,
+.punchLine {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
+.scheduleLine {
+  padding-bottom: 0.45rem;
+  border-bottom: 1px solid rgba(16, 33, 62, 0.08);
+}
+
+.scheduleLine span,
+.punchLine span {
+  width: fit-content;
+  border-radius: 999px;
+  padding: 0.35rem 0.6rem;
+  font-size: var(--font-size-sm);
+  font-weight: 900;
+}
+
+.scheduleLine span {
+  background: #edf4ff;
+  color: #1550a0;
+}
+
+.punchLine span {
+  display: grid;
+  grid-template-columns: auto auto;
+  column-gap: 0.45rem;
+  row-gap: 0.08rem;
+  align-items: center;
+  background: #f8fafc;
+  color: #1f2937;
+}
+
+.punchLine small {
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.punchLine .lunchTotal {
+  background: #ecfdf3;
+  color: #05603a;
+}
+
+.scheduleLine .unplannedWork {
+  background: #fff4ed;
+  color: #b54708;
+}
+
+.issueRow td {
+  background: #fffaf5;
+}
+
+.errorBox {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.9rem 1rem;
+  color: #b42318;
+  font-weight: 800;
+}
+
+.loadingScene {
+  display: grid;
+  gap: 0.7rem;
+  padding: 1rem;
+}
+
+.skeletonTitle,
+.skeletonRow {
+  display: block;
+  border-radius: 0.9rem;
+  background: linear-gradient(90deg, #edf3fb 0%, #f9fbff 45%, #edf3fb 100%);
+  background-size: 220% 100%;
+  animation: detail-skeleton 1.25s ease-in-out infinite;
+}
+
+.skeletonTitle {
+  width: min(22rem, 70%);
+  height: 3.8rem;
+}
+
+.skeletonRow {
+  height: 3.2rem;
+}
+
+@media (max-width: 760px) {
+  .topbar,
+  .identity {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .backLink,
+  .monthControl {
+    width: 100%;
+  }
+}
+
+@keyframes detail-skeleton {
+  0% {
+    background-position: 120% 0;
+  }
+
+  100% {
+    background-position: -120% 0;
+  }
+}

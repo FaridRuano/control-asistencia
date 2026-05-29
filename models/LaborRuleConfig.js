@@ -22,6 +22,39 @@ const areaLunchRuleSchema = new Schema(
   { _id: false },
 );
 
+const roleLunchRuleSchema = new Schema(
+  {
+    areaCode: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    areaName: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      default: "",
+    },
+    roleCode: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    roleName: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      default: "",
+    },
+    lunchDurationMinutes: {
+      type: Number,
+      min: 0,
+      default: 60,
+    },
+  },
+  { _id: false },
+);
+
 const laborRuleConfigSchema = new Schema(
   {
     key: {
@@ -91,6 +124,10 @@ const laborRuleConfigSchema = new Schema(
     },
     areaLunchRules: {
       type: [areaLunchRuleSchema],
+      default: [],
+    },
+    roleLunchRules: {
+      type: [roleLunchRuleSchema],
       default: [],
     },
     notes: {

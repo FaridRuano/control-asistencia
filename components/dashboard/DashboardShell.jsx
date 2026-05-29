@@ -13,21 +13,26 @@ import styles from "./DashboardShell.module.scss";
 export default function DashboardShell({ title, description, children, moduleConfig = PLANNING_MODULE }) {
   const pathname = usePathname();
   const navigation = moduleConfig.navigation || [];
+
+  function isPathActive(href) {
+    return pathname === href || pathname.startsWith(`${href}/`);
+  }
+
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [openSection, setOpenSection] = useState(() => {
     const sectionWithActiveChild = navigation.find((section) =>
-      section.items.some((item) => item.href === pathname),
+      section.items.some((item) => isPathActive(item.href)),
     );
 
     return sectionWithActiveChild?.title || "";
   });
 
   function isSectionActive(section) {
-    if (pathname === section.href) {
+    if (isPathActive(section.href)) {
       return true;
     }
 
-    return section.items.some((item) => item.href === pathname);
+    return section.items.some((item) => isPathActive(item.href));
   }
 
   function closeMobileNavigation() {
@@ -165,7 +170,7 @@ export default function DashboardShell({ title, description, children, moduleCon
                   <div className={`${styles.navSectionBody} ${!hasChildren ? styles.navSectionBodyHidden : ""}`}>
                     <div className={styles.navSectionItems}>
                       {section.items.map((item) => {
-                        const active = pathname === item.href;
+                        const active = isPathActive(item.href);
 
                         return (
                           <div key={item.href} className={styles.navItemWrap}>
@@ -176,9 +181,6 @@ export default function DashboardShell({ title, description, children, moduleCon
                             >
                               <span className={styles.navLabel}>{item.label}</span>
                             </TransitionLink>
-                            <span role="tooltip" className={styles.navTooltip}>
-                              {item.description}
-                            </span>
                           </div>
                         );
                       })}
