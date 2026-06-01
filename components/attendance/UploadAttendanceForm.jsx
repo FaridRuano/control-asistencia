@@ -402,7 +402,7 @@ export default function UploadAttendanceForm() {
           <div className={styles.actions}>
             <button
               type="submit"
-              disabled={!selectedFile || isPending || isUploadLocked}
+              disabled={!selectedFile || !branchCode || isPending || isUploadLocked}
               className={styles.submit}
             >
               <Upload size={16} />

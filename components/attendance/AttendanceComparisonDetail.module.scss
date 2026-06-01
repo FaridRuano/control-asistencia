@@ -318,12 +318,26 @@
 }
 
 .additionalTag {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.severeTag {
   background: #fef3f2;
   color: #b42318;
+  box-shadow: inset 0 0 0 1px rgba(180, 35, 24, 0.22);
 }
 
 .issueRow td {
   background: #fffaf5;
+}
+
+.softIssueRow td {
+  background: #fffdfa;
+}
+
+.severeIssueRow td {
+  background: #fff1f0;
 }
 
 .ignoredRestRow td {
@@ -439,6 +453,14 @@
 
 .actionableRow:hover td {
   background: #f8fbff;
+}
+
+.softIssueRow.actionableRow:hover td {
+  background: #fff8ed;
+}
+
+.severeIssueRow.actionableRow:hover td {
+  background: #ffe7e5;
 }
 
 .actionableRow:focus {

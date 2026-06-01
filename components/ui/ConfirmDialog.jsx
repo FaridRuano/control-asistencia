@@ -2,7 +2,7 @@
 
 import { useEffect, useId } from "react";
 import { createPortal } from "react-dom";
-import { AlertTriangle, X } from "lucide-react";
+import { AlertTriangle, Loader2, X } from "lucide-react";
 
 import useClientReady from "@/hooks/useClientReady";
 import styles from "./ConfirmDialog.module.scss";
@@ -59,9 +59,10 @@ export default function ConfirmDialog({
       }}
     >
       <section
-        className={styles.dialog}
+        className={`${styles.dialog} ${isPending ? styles.dialogPending : ""}`}
         role="dialog"
         aria-modal="true"
+        aria-busy={isPending}
         aria-labelledby={titleId}
       >
         <div className={styles.header}>
@@ -87,6 +88,13 @@ export default function ConfirmDialog({
 
         {children ? <div className={styles.body}>{children}</div> : null}
 
+        {isPending ? (
+          <div className={styles.pendingState} role="status" aria-live="polite">
+            <Loader2 size={17} className={styles.spinner} />
+            <span>Procesando cambios...</span>
+          </div>
+        ) : null}
+
         <div className={styles.actions}>
           <button
             type="button"
@@ -102,6 +110,7 @@ export default function ConfirmDialog({
             onClick={onConfirm}
             disabled={isPending || confirmDisabled}
           >
+            {isPending ? <Loader2 size={16} className={styles.spinner} /> : null}
             {confirmLabel}
           </button>
         </div>

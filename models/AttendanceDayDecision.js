@@ -18,7 +18,7 @@ const attendanceDayDecisionSchema = new Schema(
     },
     decision: {
       type: String,
-      enum: ["full", "planned", "none", "custom", "discount_day"],
+      enum: ["full", "planned", "none", "custom", "discount_day", "pay_planned_day", "reviewed"],
       required: true,
       default: "full",
     },
@@ -38,6 +38,16 @@ const attendanceDayDecisionSchema = new Schema(
       default: 0,
     },
     detectedExtraordinaryMinutes: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    detectedLateMinutes: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    adjustedLateMinutes: {
       type: Number,
       min: 0,
       default: 0,

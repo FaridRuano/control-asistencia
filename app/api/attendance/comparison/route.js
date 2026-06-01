@@ -421,6 +421,15 @@ function applyDayDecision(day, decision) {
   const detectedExtraordinaryMinutes = policy.appliesExtraordinaryHours === false
     ? 0
     : Math.max(Number(day.extraordinaryMinutes) || 0, Number(decision?.detectedExtraordinaryMinutes) || 0);
+  const detectedLateMinutes = Math.max(Number(day.lateMinutes) || 0, Number(decision?.detectedLateMinutes) || 0);
+  const adjustedLateMinutes = decision
+    ? Math.min(
+      detectedLateMinutes,
+      decision.adjustedLateMinutes === undefined || decision.adjustedLateMinutes === null
+        ? Number(day.lateMinutes) || 0
+        : Math.max(0, Number(decision.adjustedLateMinutes) || 0),
+    )
+    : Number(day.lateMinutes) || 0;
   const hasAuthorizableTime = detectedSupplementaryMinutes > 0 || detectedExtraordinaryMinutes > 0;
   const plannedSupplementaryMinutes = Math.min(
     detectedSupplementaryMinutes,
@@ -434,8 +443,85 @@ function applyDayDecision(day, decision) {
         ? Number(day.scheduledWorkedMinutes) || 0
         : Number(day.plannedExtraordinaryMinutes) || 0),
   );
+  const effectiveDecision = decision || {
+    decision: "planned",
+    authorizedSupplementaryMinutes: plannedSupplementaryMinutes,
+    authorizedExtraordinaryMinutes: plannedExtraordinaryMinutes,
+    note: "",
+    decidedBy: "",
+  };
+  const plannedPaidRegularMinutes = Math.max(0, Number(day.plannedRegularMinutes) || 0);
+  const plannedPaidSupplementaryMinutes = policy.appliesSupplementaryHours === false
+    ? 0
+    : Math.max(0, (Number(day.plannedSupplementaryMinutes) || 0) - (Number(day.lunchOverageRemainderMinutes) || 0));
 
-  if (!hasAuthorizableTime) {
+  if (effectiveDecision.decision === "reviewed") {
+    return {
+      ...day,
+      tags: [],
+      hasIssue: false,
+      detectedSupplementaryMinutes,
+      detectedSupplementaryLabel: detectedSupplementaryMinutes ? minutesLabel(detectedSupplementaryMinutes) : "--",
+      detectedExtraordinaryMinutes,
+      detectedExtraordinaryLabel: detectedExtraordinaryMinutes ? minutesLabel(detectedExtraordinaryMinutes) : "--",
+      authorization: {
+        decision: "reviewed",
+        statusLabel: "Revisado",
+        authorizedSupplementaryMinutes: Number(day.supplementaryMinutes) || 0,
+        authorizedExtraordinaryMinutes: Number(day.extraordinaryMinutes) || 0,
+        detectedLateMinutes,
+        adjustedLateMinutes: Number(day.lateMinutes) || 0,
+        note: effectiveDecision.note || "",
+        decidedBy: effectiveDecision.decidedBy || "",
+        isSaved: Boolean(decision),
+      },
+    };
+  }
+
+  if (effectiveDecision.decision === "pay_planned_day") {
+    const paidTags = cleanPayrollTags(day.tags || [])
+      .filter((tag) => ![
+        "Sin picadas",
+        "Picadas incompletas",
+        "Picadas insuficientes",
+        "Salida anticipada",
+        "Atraso",
+        "Dia descontado",
+      ].includes(tag));
+
+    return {
+      ...day,
+      tags: [...paidTags, "Dia planificado pagado"],
+      hasIssue: false,
+      regularWorkedMinutes: plannedPaidRegularMinutes,
+      regularWorkedLabel: plannedPaidRegularMinutes ? minutesLabel(plannedPaidRegularMinutes) : "--",
+      lateMinutes: 0,
+      earlyLeaveMinutes: 0,
+      supplementaryMinutes: plannedPaidSupplementaryMinutes,
+      supplementaryLabel: plannedPaidSupplementaryMinutes ? minutesLabel(plannedPaidSupplementaryMinutes) : "--",
+      extraordinaryMinutes: 0,
+      extraordinaryLabel: "--",
+      detectedSupplementaryMinutes: Math.max(detectedSupplementaryMinutes, plannedPaidSupplementaryMinutes),
+      detectedSupplementaryLabel: Math.max(detectedSupplementaryMinutes, plannedPaidSupplementaryMinutes)
+        ? minutesLabel(Math.max(detectedSupplementaryMinutes, plannedPaidSupplementaryMinutes))
+        : "--",
+      detectedExtraordinaryMinutes,
+      detectedExtraordinaryLabel: detectedExtraordinaryMinutes ? minutesLabel(detectedExtraordinaryMinutes) : "--",
+      authorization: {
+        decision: "pay_planned_day",
+        statusLabel: "Dia planificado pagado",
+        authorizedSupplementaryMinutes: plannedPaidSupplementaryMinutes,
+        authorizedExtraordinaryMinutes: 0,
+        detectedLateMinutes,
+        adjustedLateMinutes: 0,
+        note: effectiveDecision.note || "",
+        decidedBy: effectiveDecision.decidedBy || "",
+        isSaved: Boolean(decision),
+      },
+    };
+  }
+
+  if (!hasAuthorizableTime && !decision) {
     return {
       ...day,
       detectedSupplementaryMinutes,
@@ -445,14 +531,6 @@ function applyDayDecision(day, decision) {
       authorization: null,
     };
   }
-
-  const effectiveDecision = decision || {
-    decision: "planned",
-    authorizedSupplementaryMinutes: plannedSupplementaryMinutes,
-    authorizedExtraordinaryMinutes: plannedExtraordinaryMinutes,
-    note: "",
-    decidedBy: "",
-  };
 
   const authorizedSupplementaryMinutes = effectiveDecision.decision === "planned"
     ? plannedSupplementaryMinutes
@@ -467,6 +545,7 @@ function applyDayDecision(day, decision) {
       Math.max(0, Number(effectiveDecision.authorizedExtraordinaryMinutes) || 0),
     );
   const adjustedTags = cleanPayrollTags(day.tags || []);
+  const lateAdjustedTags = adjustedTags.filter((tag) => tag !== "Atraso");
   const hasUnauthorizedSupplementaryTime = authorizedSupplementaryMinutes < detectedSupplementaryMinutes;
   const hasUnauthorizedExtraordinaryTime = authorizedExtraordinaryMinutes < detectedExtraordinaryMinutes;
   const hasUnauthorizedExtraTime = hasUnauthorizedSupplementaryTime || hasUnauthorizedExtraordinaryTime;
@@ -490,6 +569,8 @@ function applyDayDecision(day, decision) {
         statusLabel: "Dia descontado",
         authorizedSupplementaryMinutes: 0,
         authorizedExtraordinaryMinutes: 0,
+        detectedLateMinutes,
+        adjustedLateMinutes: 0,
         note: effectiveDecision.note || "",
         decidedBy: effectiveDecision.decidedBy || "",
         isSaved: Boolean(decision),
@@ -497,16 +578,22 @@ function applyDayDecision(day, decision) {
     };
   }
 
-  if (hasUnauthorizedSupplementaryTime) adjustedTags.push("Suplementarias adicionales");
-  if (authorizedExtraordinaryMinutes > 0) adjustedTags.push("Extraordinaria");
-  const hasIssue = adjustedTags.some((tag) =>
+  const isReviewedPlannedDecision = Boolean(decision) && effectiveDecision.decision === "planned";
+
+  if (hasUnauthorizedSupplementaryTime && !isReviewedPlannedDecision) {
+    lateAdjustedTags.push("Suplementarias adicionales");
+  }
+  if (authorizedExtraordinaryMinutes > 0) lateAdjustedTags.push("Extraordinaria");
+  if (adjustedLateMinutes > 0) lateAdjustedTags.push("Atraso");
+  const hasIssue = lateAdjustedTags.some((tag) =>
     !["Extraordinaria"].includes(tag),
   );
 
   return {
     ...day,
-    tags: adjustedTags,
+    tags: lateAdjustedTags,
     hasIssue,
+    lateMinutes: adjustedLateMinutes,
     supplementaryMinutes: authorizedSupplementaryMinutes,
     supplementaryLabel: authorizedSupplementaryMinutes ? minutesLabel(authorizedSupplementaryMinutes) : "--",
     extraordinaryMinutes: authorizedExtraordinaryMinutes,
@@ -528,6 +615,8 @@ function applyDayDecision(day, decision) {
             : "Ajustado",
       authorizedSupplementaryMinutes,
       authorizedExtraordinaryMinutes,
+      detectedLateMinutes,
+      adjustedLateMinutes,
       note: effectiveDecision.note || "",
       decidedBy: effectiveDecision.decidedBy || "",
       isSaved: Boolean(decision),
@@ -776,7 +865,8 @@ function compareDay(day, punches, laborRules, employee = {}) {
 
   if (isWorkingDay && scheduleEnd && lastPunch && lastPunch.punchedAt > scheduleEnd && !shouldUsePlannedAttendance && !hasInsufficientTwoPunchSpan && payrollPolicy.appliesSupplementaryHours) {
     const rawAdditionalSupplementaryMinutes = Math.max(0, Math.round((lastPunch.punchedAt - scheduleEnd) / 60000));
-    additionalSupplementaryMinutes = Math.max(0, rawAdditionalSupplementaryMinutes - lunchOverageMinutes);
+    const workedSurplusOverPlan = Math.max(0, workedMinutes - plannedMinutes.scheduledWorkedMinutes);
+    additionalSupplementaryMinutes = Math.min(rawAdditionalSupplementaryMinutes, workedSurplusOverPlan);
     lunchOverageRemainderMinutes = Math.max(0, lunchOverageMinutes - rawAdditionalSupplementaryMinutes);
   } else {
     lunchOverageRemainderMinutes = lunchOverageMinutes;

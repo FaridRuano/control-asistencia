@@ -66,11 +66,29 @@ function hasPlannedStart(day) {
   return ["workday", "weekend_overtime"].includes(day.dayType);
 }
 
+function hasSevereIssue(day) {
+  return (day.tags || []).some((tag) => [
+    "Sin picadas",
+    "Picadas incompletas",
+    "Picadas insuficientes",
+    "Salida anticipada",
+  ].includes(tag));
+}
+
+function hasSoftIssue(day) {
+  return (day.tags || []).includes("Suplementarias adicionales");
+}
+
 function dayRowClass(day) {
   if (isIgnorableRestDay(day)) return styles.ignoredRestRow;
-  if (canOpenDayDecision(day)) return `${day.hasIssue ? styles.issueRow : ""} ${styles.actionableRow}`;
-  if (day.hasIssue) return styles.issueRow;
-  return "";
+  const rowClasses = [];
+
+  if (canOpenDayDecision(day)) rowClasses.push(styles.actionableRow);
+  if (hasSevereIssue(day)) rowClasses.push(styles.severeIssueRow);
+  else if (day.hasIssue) rowClasses.push(styles.issueRow);
+  else if (hasSoftIssue(day)) rowClasses.push(styles.softIssueRow);
+
+  return rowClasses.join(" ");
 }
 
 function hasAuthorizableTime(day) {
@@ -94,6 +112,12 @@ function canOpenDayDecision(day) {
 
 function issueTagClass(tag) {
   if (tag === "Suplementarias adicionales") return `${styles.issueTag} ${styles.additionalTag}`;
+  if ([
+    "Sin picadas",
+    "Picadas incompletas",
+    "Picadas insuficientes",
+    "Salida anticipada",
+  ].includes(tag)) return `${styles.issueTag} ${styles.severeTag}`;
   return styles.issueTag;
 }
 
@@ -101,11 +125,19 @@ function valueHintClass(day) {
   const decision = day.authorization?.decision;
 
   if (decision === "full") return `${styles.valueHint} ${styles.valueHintAuthorized}`;
+  if (decision === "pay_planned_day") return `${styles.valueHint} ${styles.valueHintAuthorized}`;
+  if (decision === "reviewed") return `${styles.valueHint} ${styles.valueHintAuthorized}`;
   if (day.authorization?.hasUnauthorizedSupplementaryTime || day.authorization?.hasUnauthorizedExtraordinaryTime) {
     return `${styles.valueHint} ${styles.valueHintWarning}`;
   }
 
   return styles.valueHint;
+}
+
+function authorizationStatusLabel(day) {
+  const label = day?.authorization?.statusLabel || "";
+
+  return ["Según plan", "Planificado"].includes(label) ? "" : label;
 }
 
 function minutesToHourInput(value) {
@@ -137,6 +169,7 @@ function buildActionDrafts(days = []) {
     {
       supplementary: minutesToHourInput(day.authorization?.authorizedSupplementaryMinutes ?? day.detectedSupplementaryMinutes ?? day.supplementaryMinutes ?? 0),
       extraordinary: minutesToHourInput(day.authorization?.authorizedExtraordinaryMinutes ?? day.detectedExtraordinaryMinutes ?? day.extraordinaryMinutes ?? 0),
+      late: minutesToHourInput(day.authorization?.adjustedLateMinutes ?? day.lateMinutes ?? 0),
       note: day.authorization?.note || "",
       decision: day.authorization?.decision || "custom",
     },
@@ -163,22 +196,57 @@ function plannedAuthorizationMinutes(day) {
   };
 }
 
+function plannedPaidDayMinutes(day) {
+  return {
+    plannedRegularMinutes: Math.max(0, Number(day?.plannedRegularMinutes) || 0),
+    plannedSupplementaryMinutes: Math.max(
+      0,
+      (Number(day?.plannedSupplementaryMinutes) || 0) - (Number(day?.lunchOverageRemainderMinutes) || 0),
+    ),
+    plannedExtraordinaryMinutes: Math.max(0, Number(day?.plannedExtraordinaryMinutes) || 0),
+  };
+}
+
 function authorizationPayloadForDay(employeeId, day, decision, draft = {}) {
   const draftSupplementaryMinutes = hourInputToMinutes(draft.supplementary);
   const draftExtraordinaryMinutes = hourInputToMinutes(draft.extraordinary);
-  const detectedSupplementaryMinutes = Math.max(Number(day.detectedSupplementaryMinutes) || 0, draftSupplementaryMinutes);
-  const detectedExtraordinaryMinutes = Math.max(Number(day.detectedExtraordinaryMinutes) || 0, draftExtraordinaryMinutes);
+  const draftLateMinutes = draft.late === undefined || draft.late === null
+    ? Number(day.lateMinutes) || 0
+    : hourInputToMinutes(draft.late);
+  const plannedPaidMinutes = plannedPaidDayMinutes(day);
+  const detectedSupplementaryMinutes = Math.max(
+    Number(day.detectedSupplementaryMinutes) || 0,
+    draftSupplementaryMinutes,
+    decision === "pay_planned_day" ? plannedPaidMinutes.plannedSupplementaryMinutes : 0,
+  );
+  const detectedExtraordinaryMinutes = Math.max(
+    Number(day.detectedExtraordinaryMinutes) || 0,
+    draftExtraordinaryMinutes,
+    decision === "pay_planned_day" ? plannedPaidMinutes.plannedExtraordinaryMinutes : 0,
+  );
   const plannedMinutes = plannedAuthorizationMinutes(day);
   const authorizedSupplementaryMinutes = decision === "full"
     ? detectedSupplementaryMinutes
+    : decision === "reviewed"
+      ? 0
+    : decision === "pay_planned_day"
+      ? plannedPaidMinutes.plannedSupplementaryMinutes
     : decision === "planned"
       ? plannedMinutes.plannedSupplementaryMinutes
       : Math.min(detectedSupplementaryMinutes, draftSupplementaryMinutes);
   const authorizedExtraordinaryMinutes = decision === "full"
     ? detectedExtraordinaryMinutes
+    : decision === "reviewed"
+      ? 0
+    : decision === "pay_planned_day"
+      ? plannedPaidMinutes.plannedExtraordinaryMinutes
     : decision === "planned"
       ? plannedMinutes.plannedExtraordinaryMinutes
       : Math.min(detectedExtraordinaryMinutes, draftExtraordinaryMinutes);
+  const detectedLateMinutes = Math.max(Number(day.lateMinutes) || 0, draftLateMinutes);
+  const adjustedLateMinutes = ["discount_day", "pay_planned_day"].includes(decision)
+    ? 0
+    : Math.min(detectedLateMinutes, draftLateMinutes);
 
   return {
     employeeId,
@@ -188,6 +256,8 @@ function authorizationPayloadForDay(employeeId, day, decision, draft = {}) {
     authorizedExtraordinaryMinutes,
     detectedSupplementaryMinutes,
     detectedExtraordinaryMinutes,
+    detectedLateMinutes,
+    adjustedLateMinutes,
     note: draft.note || "",
   };
 }
@@ -195,30 +265,44 @@ function authorizationPayloadForDay(employeeId, day, decision, draft = {}) {
 function buildDecisionPreview(day, draft = {}, summary = {}) {
   const draftSupplementaryMinutes = hourInputToMinutes(draft.supplementary);
   const draftExtraordinaryMinutes = hourInputToMinutes(draft.extraordinary);
+  const draftLateMinutes = hourInputToMinutes(draft.late);
+  const plannedPaidMinutes = plannedPaidDayMinutes(day);
   const detectedSupplementaryMinutes = Math.max(Number(day?.detectedSupplementaryMinutes) || 0, draftSupplementaryMinutes);
   const detectedExtraordinaryMinutes = Math.max(Number(day?.detectedExtraordinaryMinutes) || 0, draftExtraordinaryMinutes);
-  const supplementaryMinutes = Math.min(detectedSupplementaryMinutes, draftSupplementaryMinutes);
-  const extraordinaryMinutes = Math.min(detectedExtraordinaryMinutes, draftExtraordinaryMinutes);
+  const isPayPlannedDay = draft.decision === "pay_planned_day";
+  const supplementaryMinutes = isPayPlannedDay
+    ? plannedPaidMinutes.plannedSupplementaryMinutes
+    : Math.min(detectedSupplementaryMinutes, draftSupplementaryMinutes);
+  const extraordinaryMinutes = isPayPlannedDay
+    ? plannedPaidMinutes.plannedExtraordinaryMinutes
+    : Math.min(detectedExtraordinaryMinutes, draftExtraordinaryMinutes);
   const hourlyRate = Number(summary.hourlyRateRaw ?? summary.hourlyRate) || 0;
   const supplementaryMultiplier = Number(summary.supplementaryMultiplier) || 1.5;
   const extraordinaryMultiplier = Number(summary.extraordinaryMultiplier) || 2;
   const isWorkedHoliday = day?.dayType === "holiday" && (extraordinaryMinutes > 0 || (Number(day?.punchCount) || 0) > 0);
-  const regularAmount = isWorkedHoliday ? 0 : ((Number(day?.regularWorkedMinutes) || 0) / 60) * hourlyRate;
+  const regularMinutes = isPayPlannedDay
+    ? plannedPaidMinutes.plannedRegularMinutes
+    : Number(day?.regularWorkedMinutes) || 0;
+  const regularAmount = isWorkedHoliday ? 0 : (regularMinutes / 60) * hourlyRate;
   const supplementaryAmount = (supplementaryMinutes / 60) * hourlyRate * supplementaryMultiplier;
   const extraordinaryAmount = (extraordinaryMinutes / 60) * hourlyRate * extraordinaryMultiplier;
-  const lateAmount = ((Number(day?.lateMinutes) || 0) / 60) * hourlyRate;
+  const lateMinutes = draft.decision === "pay_planned_day" || draft.decision === "discount_day"
+    ? 0
+    : Math.min(Math.max(Number(day?.lateMinutes) || 0, draftLateMinutes), draftLateMinutes);
+  const lateAmount = (lateMinutes / 60) * hourlyRate;
   const isDiscountedDay = draft.decision === "discount_day";
   const previewRegularAmount = isDiscountedDay ? 0 : regularAmount;
   const previewSupplementaryAmount = isDiscountedDay ? 0 : supplementaryAmount;
   const previewExtraordinaryAmount = isDiscountedDay ? 0 : extraordinaryAmount;
-  const previewLateAmount = isDiscountedDay ? 0 : lateAmount;
+  const previewLateAmount = isDiscountedDay || isPayPlannedDay ? 0 : lateAmount;
   const total = draft.decision === "discount_day"
     ? 0
-    : regularAmount + supplementaryAmount + extraordinaryAmount - lateAmount;
+    : previewRegularAmount + previewSupplementaryAmount + previewExtraordinaryAmount - previewLateAmount;
 
   return {
     supplementaryLabel: supplementaryMinutes ? formatMinutes(supplementaryMinutes) : "--",
     extraordinaryLabel: extraordinaryMinutes ? formatMinutes(extraordinaryMinutes) : "--",
+    lateLabel: lateMinutes ? formatMinutes(lateMinutes) : "--",
     breakdown: [
       { label: "Laborales", valueLabel: moneyLabel(previewRegularAmount) },
       { label: "Suplementarias", valueLabel: moneyLabel(previewSupplementaryAmount) },
@@ -229,6 +313,10 @@ function buildDecisionPreview(day, draft = {}, summary = {}) {
     totalLabel: moneyLabel(total),
     statusLabel: draft.decision === "full"
       ? "Vista previa: todo"
+      : draft.decision === "reviewed"
+        ? "Vista previa: revisado"
+      : draft.decision === "pay_planned_day"
+        ? "Vista previa: pagar plan"
       : draft.decision === "planned"
         ? "Vista previa: plan"
         : draft.decision === "discount_day"
@@ -274,6 +362,7 @@ export default function AttendanceComparisonDetail({ employeeId, initialFilters 
   };
   const selectedDay = row?.days?.find((day) => day.dateKey === selectedDayKey) || null;
   const authorizableDays = row?.days?.filter((day) => hasAuthorizableTime(day) && !isIgnorableRestDay(day)) || [];
+  const savedDecisionDays = row?.days?.filter((day) => day.authorization?.isSaved) || [];
   const selectedDraft = selectedDay ? actionDrafts[selectedDay.dateKey] || {} : {};
   const selectedPreview = selectedDay ? buildDecisionPreview(selectedDay, selectedDraft, row?.summary || {}) : null;
 
@@ -332,24 +421,38 @@ export default function AttendanceComparisonDetail({ employeeId, initialFilters 
     }));
   }
 
-  function applyQuickAction(day, decision) {
+  function quickActionDraft(day, decision, currentDraft = {}) {
     const plannedMinutes = plannedAuthorizationMinutes(day);
+    const plannedPaidMinutes = plannedPaidDayMinutes(day);
+
+    return {
+      ...currentDraft,
+      supplementary: decision === "full"
+        ? minutesToHourInput(day.detectedSupplementaryMinutes || 0)
+        : decision === "reviewed"
+          ? (currentDraft.supplementary || "")
+        : decision === "pay_planned_day"
+          ? minutesToHourInput(plannedPaidMinutes.plannedSupplementaryMinutes)
+        : decision === "planned"
+          ? minutesToHourInput(plannedMinutes.plannedSupplementaryMinutes)
+          : "",
+      extraordinary: decision === "full"
+        ? minutesToHourInput(day.detectedExtraordinaryMinutes || 0)
+        : decision === "reviewed"
+          ? (currentDraft.extraordinary || "")
+        : decision === "pay_planned_day"
+          ? minutesToHourInput(plannedPaidMinutes.plannedExtraordinaryMinutes)
+        : decision === "planned"
+          ? minutesToHourInput(plannedMinutes.plannedExtraordinaryMinutes)
+          : "",
+      decision,
+    };
+  }
+
+  function applyQuickAction(day, decision) {
     setActionDrafts((current) => ({
       ...current,
-      [day.dateKey]: {
-        ...(current[day.dateKey] || {}),
-        supplementary: decision === "full"
-          ? minutesToHourInput(day.detectedSupplementaryMinutes || 0)
-          : decision === "planned"
-            ? minutesToHourInput(plannedMinutes.plannedSupplementaryMinutes)
-            : "",
-        extraordinary: decision === "full"
-          ? minutesToHourInput(day.detectedExtraordinaryMinutes || 0)
-          : decision === "planned"
-            ? minutesToHourInput(plannedMinutes.plannedExtraordinaryMinutes)
-            : "",
-        decision,
-      },
+      [day.dateKey]: quickActionDraft(day, decision, current[day.dateKey] || {}),
     }));
   }
 
@@ -358,9 +461,9 @@ export default function AttendanceComparisonDetail({ employeeId, initialFilters 
     setSelectedDayKey(day.dateKey);
   }
 
-  async function saveDayAction(day) {
-    const draft = actionDrafts[day.dateKey] || {};
-    const decision = ["full", "planned", "none", "discount_day"].includes(draft.decision) ? draft.decision : "custom";
+  async function saveDayAction(day, overrideDraft = null) {
+    const draft = overrideDraft || actionDrafts[day.dateKey] || {};
+    const decision = ["full", "planned", "none", "discount_day", "pay_planned_day", "reviewed"].includes(draft.decision) ? draft.decision : "custom";
 
     try {
       setSavingDay(day.dateKey);
@@ -377,6 +480,76 @@ export default function AttendanceComparisonDetail({ employeeId, initialFilters 
 
       if (!response.ok) {
         throw new Error(payload.error || "No se pudo guardar la decisión.");
+      }
+
+      setSelectedDayKey("");
+      await loadReport(month);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setSavingDay("");
+    }
+  }
+
+  async function toggleReviewedDay(day) {
+    const isReviewed = day.authorization?.decision === "reviewed";
+
+    try {
+      setSavingDay(day.dateKey);
+      setError("");
+
+      const response = await fetch("/api/attendance/day-decisions", {
+        method: isReviewed ? "DELETE" : "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(isReviewed
+          ? { employeeId, dateKey: day.dateKey }
+          : authorizationPayloadForDay(employeeId, day, "reviewed", {
+            ...(actionDrafts[day.dateKey] || {}),
+            decision: "reviewed",
+            note: actionDrafts[day.dateKey]?.note || "Día revisado sin ajuste de valores.",
+          })),
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.error || "No se pudo actualizar la revisión.");
+      }
+
+      setSelectedDayKey("");
+      await loadReport(month);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setSavingDay("");
+    }
+  }
+
+  async function resetDayDecision(day) {
+    if (!day.authorization?.isSaved) {
+      setActionDrafts((current) => ({
+        ...current,
+        [day.dateKey]: buildActionDrafts([day])[day.dateKey],
+      }));
+      return;
+    }
+
+    try {
+      setSavingDay(day.dateKey);
+      setError("");
+
+      const response = await fetch("/api/attendance/day-decisions", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ employeeId, dateKey: day.dateKey }),
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.error || "No se pudo reiniciar la decisión.");
       }
 
       setSelectedDayKey("");
@@ -411,6 +584,37 @@ export default function AttendanceComparisonDetail({ employeeId, initialFilters 
 
         if (!response.ok) {
           throw new Error(payload.error || "No se pudo guardar la autorización global.");
+        }
+      }
+
+      await loadReport(month);
+      setPendingBulkDecision("");
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setSavingBulkAction("");
+    }
+  }
+
+  async function resetBulkDecisions() {
+    if (!savedDecisionDays.length) return;
+
+    try {
+      setSavingBulkAction("reset");
+      setError("");
+
+      for (const day of savedDecisionDays) {
+        const response = await fetch("/api/attendance/day-decisions", {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ employeeId, dateKey: day.dateKey }),
+        });
+        const payload = await response.json();
+
+        if (!response.ok) {
+          throw new Error(payload.error || "No se pudo reiniciar las decisiones del mes.");
         }
       }
 
@@ -502,7 +706,7 @@ export default function AttendanceComparisonDetail({ employeeId, initialFilters 
           <div className={styles.bulkActions}>
             <div>
               <strong>Autorización global</strong>
-              <span>{authorizableDays.length} días con horas para revisar</span>
+              <span>{authorizableDays.length} días con horas para revisar · {savedDecisionDays.length} decisiones guardadas</span>
             </div>
             <div className="catalog-actions">
               <button
@@ -520,6 +724,14 @@ export default function AttendanceComparisonDetail({ employeeId, initialFilters 
                 disabled={!authorizableDays.length || Boolean(savingBulkAction)}
               >
                 {savingBulkAction === "planned" ? "Ajustando..." : "Ajustar todo al plan"}
+              </button>
+              <button
+                type="button"
+                className="catalog-button-ghost"
+                onClick={() => setPendingBulkDecision("reset")}
+                disabled={!savedDecisionDays.length || Boolean(savingBulkAction)}
+              >
+                {savingBulkAction === "reset" ? "Reiniciando..." : "Reiniciar todo"}
               </button>
             </div>
           </div>
@@ -656,8 +868,8 @@ export default function AttendanceComparisonDetail({ employeeId, initialFilters 
                         ) : (
                           <div className={styles.valueCell}>
                             <strong>{day.pay?.totalLabel || "$0.00"}</strong>
-                            {hasAuthorizableTime(day) || day.authorization?.isSaved ? (
-                              <span className={valueHintClass(day)}>{day.authorization?.statusLabel || "Según plan"}</span>
+                            {authorizationStatusLabel(day) ? (
+                              <span className={valueHintClass(day)}>{authorizationStatusLabel(day)}</span>
                             ) : null}
                             {day.pay?.items?.length ? (
                               <div className={styles.valueBreakdown}>
@@ -705,7 +917,7 @@ export default function AttendanceComparisonDetail({ employeeId, initialFilters 
                   <article>
                     <span>Vista previa</span>
                     <strong>Sup. {selectedPreview?.supplementaryLabel || "--"}</strong>
-                    <small>Ext. {selectedPreview?.extraordinaryLabel || "--"}</small>
+                    <small>Ext. {selectedPreview?.extraordinaryLabel || "--"} · Atr. {selectedPreview?.lateLabel || "--"}</small>
                   </article>
                   <article>
                     <span>Valor previsto</span>
@@ -759,6 +971,19 @@ export default function AttendanceComparisonDetail({ employeeId, initialFilters 
                       }}
                     />
                   </label>
+                  <label>
+                    <span>Atraso aplicado (h)</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="Ej. 0.30"
+                      value={actionDrafts[selectedDay.dateKey]?.late ?? ""}
+                      onChange={(event) => {
+                        updateActionDraft(selectedDay.dateKey, "late", event.target.value);
+                        updateActionDraft(selectedDay.dateKey, "decision", "custom");
+                      }}
+                    />
+                  </label>
                   <label className={styles.modalNote}>
                     <span>Motivo</span>
                     <textarea
@@ -774,12 +999,30 @@ export default function AttendanceComparisonDetail({ employeeId, initialFilters 
                   <span className="catalog-actions-label">Acciones rápidas</span>
                   <div className="catalog-actions">
                     <button type="button" className="catalog-button-ghost" onClick={() => applyQuickAction(selectedDay, "full")} disabled={savingDay === selectedDay.dateKey}>Autorizar todo</button>
-                    <button type="button" className="catalog-button-ghost" onClick={() => applyQuickAction(selectedDay, "planned")} disabled={savingDay === selectedDay.dateKey}>Ajustar al plan</button>
+                    <button type="button" className="catalog-button-ghost" onClick={() => applyQuickAction(selectedDay, "pay_planned_day")} disabled={savingDay === selectedDay.dateKey}>Pagar día planificado</button>
+                    <button type="button" className="catalog-button-ghost" onClick={() => {
+                      updateActionDraft(selectedDay.dateKey, "late", "");
+                      updateActionDraft(selectedDay.dateKey, "decision", "custom");
+                    }} disabled={savingDay === selectedDay.dateKey}>Justificar atraso</button>
+                    <button type="button" className="catalog-button-ghost" onClick={() => {
+                      updateActionDraft(selectedDay.dateKey, "late", minutesToHourInput(selectedDay.authorization?.detectedLateMinutes ?? selectedDay.lateMinutes ?? 0));
+                      updateActionDraft(selectedDay.dateKey, "decision", "custom");
+                    }} disabled={savingDay === selectedDay.dateKey}>Restaurar atraso</button>
                     <button type="button" className="catalog-button-danger" onClick={() => applyQuickAction(selectedDay, "discount_day")} disabled={savingDay === selectedDay.dateKey}>Descontar dia</button>
                   </div>
                 </div>
 
                 <div className="catalog-actions catalog-actions-end catalog-actions-separated">
+                  <button type="button" className="catalog-button-ghost" onClick={() => resetDayDecision(selectedDay)} disabled={savingDay === selectedDay.dateKey}>
+                    {savingDay === selectedDay.dateKey ? "Reiniciando..." : "Reiniciar"}
+                  </button>
+                  <button type="button" className="catalog-button-ghost" onClick={() => toggleReviewedDay(selectedDay)} disabled={savingDay === selectedDay.dateKey}>
+                    {savingDay === selectedDay.dateKey
+                      ? "Guardando..."
+                      : selectedDay.authorization?.decision === "reviewed"
+                        ? "Quitar revisado"
+                        : "Marcar revisado"}
+                  </button>
                   <button type="button" className="catalog-button-primary" onClick={() => saveDayAction(selectedDay)} disabled={savingDay === selectedDay.dateKey}>
                     {savingDay === selectedDay.dateKey ? "Guardando..." : "Guardar ajuste"}
                   </button>
@@ -790,17 +1033,34 @@ export default function AttendanceComparisonDetail({ employeeId, initialFilters 
 
           <ConfirmDialog
             isOpen={Boolean(pendingBulkDecision)}
-            title={pendingBulkDecision === "full" ? "Autorizar todo" : "Ajustar todo al plan"}
-            message={`Se guardará una decisión para ${authorizableDays.length} días con horas autorizables. Cada cambio quedará registrado en auditoría.`}
-            confirmLabel={pendingBulkDecision === "full" ? "Autorizar todo" : "Ajustar al plan"}
+            title={pendingBulkDecision === "full"
+              ? "Autorizar todo"
+              : pendingBulkDecision === "reset"
+                ? "Reiniciar todo"
+                : "Ajustar todo al plan"}
+            message={pendingBulkDecision === "reset"
+              ? `Se eliminarán ${savedDecisionDays.length} decisiones guardadas de este mes. El reporte volverá al cálculo automático y reaparecerán los avisos pendientes.`
+              : `Se guardará una decisión para ${authorizableDays.length} días con horas autorizables. Cada cambio quedará registrado en auditoría.`}
+            confirmLabel={pendingBulkDecision === "full"
+              ? "Autorizar todo"
+              : pendingBulkDecision === "reset"
+                ? "Reiniciar todo"
+                : "Ajustar al plan"}
             cancelLabel="Cancelar"
-            tone="default"
+            tone={pendingBulkDecision === "reset" ? "danger" : "default"}
             isPending={Boolean(savingBulkAction)}
-            confirmDisabled={!authorizableDays.length}
+            confirmDisabled={pendingBulkDecision === "reset" ? !savedDecisionDays.length : !authorizableDays.length}
             onCancel={() => {
               if (!savingBulkAction) setPendingBulkDecision("");
             }}
-            onConfirm={() => saveBulkDecision(pendingBulkDecision)}
+            onConfirm={() => {
+              if (pendingBulkDecision === "reset") {
+                resetBulkDecisions();
+                return;
+              }
+
+              saveBulkDecision(pendingBulkDecision);
+            }}
           >
             <div className={styles.confirmDetails}>
               <span>Empleado</span>
@@ -808,7 +1068,11 @@ export default function AttendanceComparisonDetail({ employeeId, initialFilters 
               <span>Mes</span>
               <strong>{month}</strong>
               <span>Acción</span>
-              <strong>{pendingBulkDecision === "full" ? "Autorizar todas las horas detectadas" : "Respetar solo las horas planificadas"}</strong>
+              <strong>{pendingBulkDecision === "full"
+                ? "Autorizar todas las horas detectadas"
+                : pendingBulkDecision === "reset"
+                  ? `Eliminar ${savedDecisionDays.length} decisiones guardadas`
+                  : "Respetar solo las horas planificadas"}</strong>
             </div>
           </ConfirmDialog>
         </>

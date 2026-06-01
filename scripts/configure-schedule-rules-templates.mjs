@@ -180,6 +180,10 @@ function buildTemplatesForRole(area, role) {
     ];
   }
 
+  if (area.code === "ALM" && role.code !== "JEFALM") {
+    return [];
+  }
+
   if (area.code === "ALM") {
     return [
       template({

@@ -6,7 +6,7 @@ import connectToDatabase from "@/lib/db/mongodb";
 import AttendanceDayDecision from "@/models/AttendanceDayDecision";
 import Employee from "@/models/Employee";
 
-const DECISIONS = new Set(["full", "planned", "none", "custom", "discount_day"]);
+const DECISIONS = new Set(["full", "planned", "none", "custom", "discount_day", "pay_planned_day", "reviewed"]);
 
 function minutes(value) {
   return Math.max(0, Math.round(Number(value) || 0));
@@ -28,8 +28,12 @@ function normalizePayload(body) {
   const decision = String(body?.decision || "custom").trim();
   const detectedSupplementaryMinutes = minutes(body?.detectedSupplementaryMinutes);
   const detectedExtraordinaryMinutes = minutes(body?.detectedExtraordinaryMinutes);
+  const detectedLateMinutes = minutes(body?.detectedLateMinutes);
   let authorizedSupplementaryMinutes = minutes(body?.authorizedSupplementaryMinutes);
   let authorizedExtraordinaryMinutes = minutes(body?.authorizedExtraordinaryMinutes);
+  let adjustedLateMinutes = body?.adjustedLateMinutes === undefined || body?.adjustedLateMinutes === null
+    ? detectedLateMinutes
+    : minutes(body?.adjustedLateMinutes);
 
   if (!employeeId) {
     throw new Error("Debes indicar el empleado.");
@@ -47,10 +51,18 @@ function normalizePayload(body) {
   if (decision === "none" || decision === "discount_day") {
     authorizedSupplementaryMinutes = 0;
     authorizedExtraordinaryMinutes = 0;
+    adjustedLateMinutes = 0;
+  }
+
+  if (decision === "reviewed") {
+    authorizedSupplementaryMinutes = 0;
+    authorizedExtraordinaryMinutes = 0;
+    adjustedLateMinutes = detectedLateMinutes;
   }
 
   authorizedSupplementaryMinutes = Math.min(authorizedSupplementaryMinutes, detectedSupplementaryMinutes);
   authorizedExtraordinaryMinutes = Math.min(authorizedExtraordinaryMinutes, detectedExtraordinaryMinutes);
+  adjustedLateMinutes = Math.min(adjustedLateMinutes, detectedLateMinutes);
 
   return {
     employeeId,
@@ -60,6 +72,8 @@ function normalizePayload(body) {
     authorizedExtraordinaryMinutes,
     detectedSupplementaryMinutes,
     detectedExtraordinaryMinutes,
+    detectedLateMinutes,
+    adjustedLateMinutes,
     note: String(body?.note || "").trim().slice(0, 240),
   };
 }
@@ -102,6 +116,8 @@ export async function POST(request) {
           authorizedExtraordinaryMinutes: payload.authorizedExtraordinaryMinutes,
           detectedSupplementaryMinutes: payload.detectedSupplementaryMinutes,
           detectedExtraordinaryMinutes: payload.detectedExtraordinaryMinutes,
+          detectedLateMinutes: payload.detectedLateMinutes,
+          adjustedLateMinutes: payload.adjustedLateMinutes,
           note: payload.note,
           decidedBy: actor,
         },
@@ -134,6 +150,8 @@ export async function POST(request) {
           authorizedExtraordinaryMinutes: previousDecision.authorizedExtraordinaryMinutes,
           detectedSupplementaryMinutes: previousDecision.detectedSupplementaryMinutes,
           detectedExtraordinaryMinutes: previousDecision.detectedExtraordinaryMinutes,
+          detectedLateMinutes: previousDecision.detectedLateMinutes || 0,
+          adjustedLateMinutes: previousDecision.adjustedLateMinutes || 0,
           note: previousDecision.note || "",
           decidedBy: previousDecision.decidedBy || "",
           updatedAt: previousDecision.updatedAt || null,
@@ -144,6 +162,8 @@ export async function POST(request) {
           authorizedExtraordinaryMinutes: payload.authorizedExtraordinaryMinutes,
           detectedSupplementaryMinutes: payload.detectedSupplementaryMinutes,
           detectedExtraordinaryMinutes: payload.detectedExtraordinaryMinutes,
+          detectedLateMinutes: payload.detectedLateMinutes,
+          adjustedLateMinutes: payload.adjustedLateMinutes,
           note: payload.note,
           decidedBy: actor,
         },
@@ -157,6 +177,74 @@ export async function POST(request) {
   } catch (error) {
     return NextResponse.json(
       { error: error.message || "No se pudo guardar la decisión del día." },
+      { status: 400 },
+    );
+  }
+}
+
+export async function DELETE(request) {
+  const user = await getAuthenticatedUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Sesión inválida o expirada." }, { status: 401 });
+  }
+
+  try {
+    const body = await request.json();
+    const employeeId = String(body?.employeeId || "").trim();
+    const dateKey = parseDateKey(body?.dateKey);
+
+    if (!employeeId) {
+      throw new Error("Debes indicar el empleado.");
+    }
+
+    await connectToDatabase();
+
+    const employee = await Employee.findById(employeeId).select("_id fullName").lean();
+
+    if (!employee) {
+      return NextResponse.json({ error: "Empleado no encontrado." }, { status: 404 });
+    }
+
+    const previousDecision = await AttendanceDayDecision.findOne({ employee: employeeId, dateKey }).lean();
+    const actor = user.employeeName || user.username || user.id;
+
+    await AttendanceDayDecision.deleteOne({ employee: employeeId, dateKey });
+
+    await createAuditLog({
+      actor,
+      action: "attendanceDayDecision.delete",
+      entityType: "attendanceDayDecision",
+      entityId: previousDecision?._id?.toString?.() || "",
+      entityLabel: `${employee.fullName || employeeId} ${dateKey}`,
+      route: "/api/attendance/day-decisions",
+      details: {
+        employeeId,
+        employeeName: employee.fullName || "",
+        dateKey,
+        before: previousDecision ? {
+          decision: previousDecision.decision,
+          authorizedSupplementaryMinutes: previousDecision.authorizedSupplementaryMinutes,
+          authorizedExtraordinaryMinutes: previousDecision.authorizedExtraordinaryMinutes,
+          detectedSupplementaryMinutes: previousDecision.detectedSupplementaryMinutes,
+          detectedExtraordinaryMinutes: previousDecision.detectedExtraordinaryMinutes,
+          detectedLateMinutes: previousDecision.detectedLateMinutes || 0,
+          adjustedLateMinutes: previousDecision.adjustedLateMinutes || 0,
+          note: previousDecision.note || "",
+          decidedBy: previousDecision.decidedBy || "",
+          updatedAt: previousDecision.updatedAt || null,
+        } : null,
+        after: null,
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: "Revisión quitada correctamente.",
+    });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error.message || "No se pudo quitar la decisión del día." },
       { status: 400 },
     );
   }

@@ -20,6 +20,7 @@ function readInitialFilters() {
       areaCode: "",
       roleCode: "",
       employeeId: "",
+      onlyIssues: false,
     };
   }
 
@@ -31,6 +32,7 @@ function readInitialFilters() {
     areaCode: params.get("areaCode") || "",
     roleCode: params.get("roleCode") || "",
     employeeId: params.get("employeeId") || "",
+    onlyIssues: params.get("onlyIssues") === "1",
   };
 }
 
@@ -44,6 +46,7 @@ function syncUrl(filters) {
   if (filters.areaCode) params.set("areaCode", filters.areaCode);
   if (filters.roleCode) params.set("roleCode", filters.roleCode);
   if (filters.employeeId) params.set("employeeId", filters.employeeId);
+  if (filters.onlyIssues) params.set("onlyIssues", "1");
 
   const query = params.toString();
   window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
@@ -51,6 +54,14 @@ function syncUrl(filters) {
 
 function minutesBadge(value) {
   return value && value !== "0m" ? value : "--";
+}
+
+function normalizeSearch(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
 }
 
 function MetricColumn({ label, value, tone = "neutral" }) {
@@ -74,6 +85,7 @@ export default function AttendanceComparisonView() {
   const [employees, setEmployees] = useState([]);
   const [branches, setBranches] = useState([]);
   const [rows, setRows] = useState([]);
+  const [employeeSearch, setEmployeeSearch] = useState("");
   const [isLoadingCatalogs, setIsLoadingCatalogs] = useState(true);
   const [isLoadingComparison, setIsLoadingComparison] = useState(true);
   const [error, setError] = useState("");
@@ -115,6 +127,26 @@ export default function AttendanceComparisonView() {
 
     return [...options.entries()].sort((left, right) => left[1].localeCompare(right[1], "es"));
   }, [employees, filters.areaCode, filters.branchCode]);
+
+  const visibleRows = useMemo(
+    () => {
+      const search = normalizeSearch(employeeSearch);
+
+      return rows.filter((row) => {
+        if (filters.onlyIssues && !((Number(row.summary?.issueDays) || 0) > 0 || !row.hasSchedule)) return false;
+        if (filters.employeeId || !search) return true;
+
+        return normalizeSearch(row.employee?.fullName).includes(search);
+      });
+    },
+    [employeeSearch, filters.employeeId, filters.onlyIssues, rows],
+  );
+
+  const employeeDatalistId = "attendance-comparison-employees";
+  const selectedEmployeeName = useMemo(
+    () => employees.find((employee) => employee.id === filters.employeeId)?.fullName || "",
+    [employees, filters.employeeId],
+  );
 
   function updateFilters(nextValues) {
     const nextFilters = {
@@ -190,23 +222,49 @@ export default function AttendanceComparisonView() {
       nextValues.areaCode = "";
       nextValues.roleCode = "";
       nextValues.employeeId = "";
+      setEmployeeSearch("");
     }
 
     if (key === "areaCode") {
       nextValues.roleCode = "";
       nextValues.employeeId = "";
+      setEmployeeSearch("");
     }
 
     if (key === "roleCode") {
       nextValues.employeeId = "";
+      setEmployeeSearch("");
     }
 
     updateFilters(nextValues);
   }
 
   function handleSearch() {
-    syncUrl(filters);
-    loadComparison(filters);
+    const search = normalizeSearch(employeeSearch);
+    const matchedEmployee = search
+      ? filteredEmployees.find((employee) => normalizeSearch(employee.fullName) === search)
+      : null;
+    const nextFilters = matchedEmployee
+      ? { ...filters, employeeId: matchedEmployee.id }
+      : filters;
+
+    if (matchedEmployee && filters.employeeId !== matchedEmployee.id) {
+      setFilters(nextFilters);
+    }
+
+    syncUrl(nextFilters);
+    loadComparison(nextFilters);
+  }
+
+  function handleEmployeeSearchChange(value) {
+    setEmployeeSearch(value);
+
+    const search = normalizeSearch(value);
+    const matchedEmployee = search
+      ? filteredEmployees.find((employee) => normalizeSearch(employee.fullName) === search)
+      : null;
+
+    updateFilters({ employeeId: matchedEmployee?.id || "" });
   }
 
   function buildEmployeeReportHref(employeeId) {
@@ -279,16 +337,32 @@ export default function AttendanceComparisonView() {
           </select>
         </label>
 
-        <label>
+        <label className={styles.employeeAutocomplete}>
           <span>Empleado</span>
-          <select value={filters.employeeId} onChange={(event) => handleFilterChange("employeeId", event.target.value)}>
-            <option value="">Todos</option>
+          <input
+            type="search"
+            value={employeeSearch || selectedEmployeeName}
+            list={employeeDatalistId}
+            placeholder="Buscar empleado..."
+            onChange={(event) => handleEmployeeSearchChange(event.target.value)}
+          />
+          <datalist id={employeeDatalistId}>
             {filteredEmployees.map((employee) => (
-              <option key={employee.id} value={employee.id}>
-                {employee.fullName}
-              </option>
+              <option key={employee.id} value={employee.fullName} />
             ))}
-          </select>
+          </datalist>
+        </label>
+
+        <label className={styles.toggleFilter}>
+          <span>Novedades</span>
+          <button
+            type="button"
+            className={`${styles.toggleButton} ${filters.onlyIssues ? styles.toggleButtonActive : ""}`}
+            onClick={() => updateFilters({ onlyIssues: !filters.onlyIssues })}
+            aria-pressed={filters.onlyIssues}
+          >
+            Solo con novedades
+          </button>
         </label>
 
         <button type="button" className={styles.primaryButton} onClick={handleSearch} disabled={isLoading}>
@@ -325,7 +399,7 @@ export default function AttendanceComparisonView() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((row) => (
+                  {visibleRows.map((row) => (
                     <tr
                       key={row.employee.id}
                       className={styles.clickableRow}
@@ -360,6 +434,11 @@ export default function AttendanceComparisonView() {
                       </td>
                       <td>
                         <div className={styles.metricColumn}>
+                          <MetricColumn
+                            label="Novedades"
+                            value={row.summary.issueDays || 0}
+                            tone={(row.summary.issueDays || 0) > 0 || !row.hasSchedule ? "danger" : "muted"}
+                          />
                           <MetricColumn label="Incompletos" value={row.summary.missingPunchDays} tone="warning" />
                           <MetricColumn label="Sin planificar" value={row.summary.unplannedWorkDays} tone="accent" />
                           <MetricColumn label="Atrasos" value={row.summary.lateDays} tone="danger" />
@@ -375,9 +454,11 @@ export default function AttendanceComparisonView() {
                       </td>
                     </tr>
                   ))}
-                  {!rows.length ? (
+                  {!visibleRows.length ? (
                     <tr>
-                      <td colSpan={4} className={styles.emptyCell}>No hay empleados para los filtros seleccionados.</td>
+                      <td colSpan={4} className={styles.emptyCell}>
+                        {filters.onlyIssues ? "No hay empleados con novedades para los filtros seleccionados." : "No hay empleados para los filtros seleccionados."}
+                      </td>
                     </tr>
                   ) : null}
                 </tbody>

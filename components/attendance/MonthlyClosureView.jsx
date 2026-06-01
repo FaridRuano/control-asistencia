@@ -56,6 +56,7 @@ export default function MonthlyClosureView() {
   const isClosed = Boolean(payload?.isClosed);
   const rows = data?.rows || [];
   const closureVersion = payload?.closure?.version || 0;
+  const isUpdatingClosure = isSaving || (isLoading && Boolean(payload));
 
   async function loadClosure(nextMonth = month, nextMode = mode) {
     try {
@@ -231,7 +232,16 @@ export default function MonthlyClosureView() {
         </div>
       ) : (
         <>
-          <div className={styles.tableShell}>
+          <div className={`${styles.tableShell} ${isUpdatingClosure ? styles.tableShellUpdating : ""}`} aria-busy={isUpdatingClosure}>
+            {isUpdatingClosure ? (
+              <>
+                <span className={styles.loadingRail} aria-hidden="true" />
+                <div className={styles.updateOverlay} role="status" aria-live="polite">
+                  <RefreshCw size={18} />
+                  <strong>{isSaving ? "Actualizando cierre..." : "Cargando cierre..."}</strong>
+                </div>
+              </>
+            ) : null}
             <div className={styles.tableScroller}>
               <table>
                 <thead>

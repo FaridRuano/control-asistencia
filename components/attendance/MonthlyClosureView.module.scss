@@ -110,7 +110,59 @@
 }
 
 .tableShell {
+  position: relative;
   overflow: hidden;
+}
+
+.tableShellUpdating .tableScroller {
+  opacity: 0.48;
+  filter: saturate(0.85);
+  pointer-events: none;
+}
+
+.loadingRail {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  width: 100%;
+  height: 0.18rem;
+  overflow: hidden;
+  background: rgba(16, 33, 62, 0.08);
+}
+
+.loadingRail::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, rgba(16, 33, 62, 0.7), transparent);
+  animation: closure-rail 1.05s ease-in-out infinite;
+}
+
+.updateOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  gap: 0.55rem;
+  background: rgba(255, 255, 255, 0.56);
+  color: #10213e;
+  text-align: center;
+}
+
+.updateOverlay svg {
+  animation: closure-spin 820ms linear infinite;
+}
+
+.updateOverlay strong {
+  border: 1px solid rgba(16, 33, 62, 0.1);
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 16px 34px rgba(16, 33, 62, 0.12);
+  padding: 0.65rem 0.95rem;
 }
 
 .tableScroller {
@@ -241,5 +293,21 @@
 
   100% {
     background-position: -120% 0;
+  }
+}
+
+@keyframes closure-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes closure-rail {
+  0% {
+    transform: translateX(-110%);
+  }
+
+  100% {
+    transform: translateX(270%);
   }
 }

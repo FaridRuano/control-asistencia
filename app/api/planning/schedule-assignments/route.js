@@ -17,6 +17,59 @@ import ScheduleAssignment from "@/models/ScheduleAssignment";
 
 const VARIABLE_SCHEDULE_AREA_CODES = new Set(["ALM", "BOD"]);
 
+const DAY_LABELS = new Map([
+  [0, "Domingo"],
+  [1, "Lunes"],
+  [2, "Martes"],
+  [3, "Miercoles"],
+  [4, "Jueves"],
+  [5, "Viernes"],
+  [6, "Sabado"],
+]);
+
+function getDayOfWeek(dateKey) {
+  return new Date(`${dateKey}T12:00:00`).getDay();
+}
+
+function normalizeOperationalDay(day, holidayNamesByDate) {
+  const dateKey = String(day?.dateKey || "").trim();
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
+    return null;
+  }
+
+  const dayOfWeek = getDayOfWeek(dateKey);
+  const holidayName = holidayNamesByDate.get(dateKey);
+  const requestedType = String(day?.dayType || "off_day").trim();
+  const isWorkday = requestedType === "workday" || requestedType === "weekend_overtime";
+
+  if (holidayName) {
+    return {
+      dateKey,
+      dayOfWeek,
+      label: DAY_LABELS.get(dayOfWeek) || "",
+      dayType: "holiday",
+      startTime: "",
+      lunchDurationMinutes: 0,
+      endTime: "",
+      authorizedExtraMinutes: 0,
+      source: "holiday",
+    };
+  }
+
+  return {
+    dateKey,
+    dayOfWeek,
+    label: DAY_LABELS.get(dayOfWeek) || "",
+    dayType: isWorkday ? requestedType : "off_day",
+    startTime: isWorkday ? String(day?.startTime || "").trim() : "",
+    lunchDurationMinutes: isWorkday ? Math.max(0, Number(day?.lunchDurationMinutes) || 0) : 0,
+    endTime: isWorkday ? String(day?.endTime || "").trim() : "",
+    authorizedExtraMinutes: isWorkday ? Math.max(0, Number(day?.authorizedExtraMinutes) || 0) : 0,
+    source: "operational",
+  };
+}
+
 export async function GET(request) {
   const authenticated = await isAuthenticated();
 
@@ -69,6 +122,90 @@ export async function POST(request) {
     const body = await request.json();
     const { monthKey } = parseMonthKey(body?.monthKey);
     const action = String(body?.action || "").trim();
+
+    if (action === "operational-save") {
+      const employeeDays = Array.isArray(body?.employeeDays) ? body.employeeDays : [];
+      const employeeIds = employeeDays
+        .map((entry) => String(entry?.employeeId || "").trim())
+        .filter(Boolean);
+      const [employees, holidays, currentAssignments] = await Promise.all([
+        Employee.find({ _id: { $in: employeeIds } }).lean(),
+        Holiday.find({ dateKey: { $regex: `^${monthKey}-` } }).lean(),
+        ScheduleAssignment.find({ monthKey, employee: { $in: employeeIds } }).lean(),
+      ]);
+      const employeesById = new Map(employees.map((employee) => [employee._id.toString(), employee]));
+      const currentByEmployee = new Map(
+        currentAssignments.map((assignment) => [assignment.employee?.toString?.() || "", assignment]),
+      );
+      const holidayNamesByDate = new Map(holidays.map((holiday) => [holiday.dateKey, holiday.name]));
+      const operations = [];
+
+      employeeDays.forEach((entry) => {
+        const employeeId = String(entry?.employeeId || "").trim();
+        const employee = employeesById.get(employeeId);
+
+        if (!employee || !VARIABLE_SCHEDULE_AREA_CODES.has(String(employee.areaCode || "").toUpperCase())) {
+          return;
+        }
+
+        const currentAssignment = currentByEmployee.get(employeeId);
+        const existingDaysByDate = new Map(
+          (currentAssignment?.generatedDays || []).map((day) => [day.dateKey, day]),
+        );
+
+        (Array.isArray(entry?.days) ? entry.days : []).forEach((day) => {
+          const normalized = normalizeOperationalDay(day, holidayNamesByDate);
+
+          if (normalized) {
+            existingDaysByDate.set(normalized.dateKey, normalized);
+          }
+        });
+
+        const generatedDays = [...existingDaysByDate.values()]
+          .filter((day) => String(day.dateKey || "").startsWith(`${monthKey}-`))
+          .sort((left, right) => String(left.dateKey).localeCompare(String(right.dateKey)));
+
+        operations.push({
+          updateOne: {
+            filter: { monthKey, employee: employee._id },
+            update: {
+              $set: {
+                monthKey,
+                employee: employee._id,
+                employeeName: employee.fullName || "",
+                employeeDni: employee.dni || "",
+                branchCode: employee.branchCode || "",
+                branchName: employee.branchName || employee.branch || "",
+                areaCode: employee.areaCode || "",
+                areaName: employee.areaName || "",
+                roleCode: employee.roleCode || "",
+                roleName: employee.roleName || "",
+                template: currentAssignment?.template || null,
+                templateName: "PROGRAMACION OPERATIVA",
+                rotationGroup: "OPERATIVO_VARIABLE",
+                generatedDays,
+                weeklyPlan: [],
+                notes: "Programacion operativa armada sin plantillas por semana.",
+              },
+            },
+            upsert: true,
+          },
+        });
+      });
+
+      if (operations.length) {
+        await ScheduleAssignment.bulkWrite(operations);
+      }
+
+      const assignments = await ScheduleAssignment.find({ monthKey })
+        .sort({ employeeName: 1 })
+        .lean();
+
+      return NextResponse.json({
+        message: `Programacion operativa guardada para ${operations.length} empleados.`,
+        assignments: assignments.map(serializeScheduleAssignment),
+      });
+    }
 
     if (action === "generate") {
       const branchCode = String(body?.branchCode || "").trim().toUpperCase();

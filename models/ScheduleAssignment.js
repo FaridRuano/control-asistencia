@@ -154,13 +154,13 @@ const scheduleAssignmentSchema = new Schema(
     template: {
       type: Schema.Types.ObjectId,
       ref: "BaseScheduleTemplate",
-      required: true,
+      default: null,
     },
     templateName: {
       type: String,
-      required: true,
       trim: true,
       uppercase: true,
+      default: "",
     },
     rotationGroup: {
       type: String,

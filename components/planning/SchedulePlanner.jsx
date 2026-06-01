@@ -7,115 +7,210 @@ import { CalendarDays, RefreshCw, Save, Wand2 } from "lucide-react";
 import FloatingNotice from "@/components/ui/FloatingNotice";
 import { formatEcuadorMonthKey } from "@/lib/datetime/ecuador";
 import { planningModulePath } from "@/lib/modules/planning/routes";
-import { getMonthWeekOptions, sortTemplatesByVariant } from "@/lib/planning/scheduleAssignments";
+import { getMonthWeekOptions } from "@/lib/planning/scheduleAssignments";
 import styles from "./SchedulePlanner.module.scss";
 
 const VARIABLE_SCHEDULE_AREA_CODES = new Set(["ALM", "BOD"]);
+
+const SHIFT_OPTIONS = [
+  {
+    key: "off",
+    label: "Descanso",
+    shortLabel: "Desc.",
+    dayType: "off_day",
+    startTime: "",
+    endTime: "",
+    lunchDurationMinutes: 0,
+    authorizedExtraMinutes: 0,
+  },
+  {
+    key: "07-18",
+    label: "07:00 - 18:00",
+    shortLabel: "07-18",
+    dayType: "workday",
+    startTime: "07:00",
+    endTime: "18:00",
+    lunchDurationMinutes: 90,
+    authorizedExtraMinutes: 60,
+  },
+  {
+    key: "08-19",
+    label: "08:00 - 19:00",
+    shortLabel: "08-19",
+    dayType: "workday",
+    startTime: "08:00",
+    endTime: "19:00",
+    lunchDurationMinutes: 90,
+    authorizedExtraMinutes: 60,
+  },
+  {
+    key: "09-19",
+    label: "09:00 - 19:00",
+    shortLabel: "09-19",
+    dayType: "workday",
+    startTime: "09:00",
+    endTime: "19:00",
+    lunchDurationMinutes: 90,
+    authorizedExtraMinutes: 60,
+  },
+  {
+    key: "extra-08-14",
+    label: "Extra 08:00 - 14:00",
+    shortLabel: "Extra",
+    dayType: "weekend_overtime",
+    startTime: "08:00",
+    endTime: "14:00",
+    lunchDurationMinutes: 0,
+    authorizedExtraMinutes: 360,
+  },
+];
+
+const SHIFT_BY_KEY = new Map(SHIFT_OPTIONS.map((shift) => [shift.key, shift]));
+const WORK_SHIFT_KEYS = ["07-18", "08-19", "09-19"];
+const DAY_LABELS = ["Dom", "Lun", "Mar", "Mie", "Jue", "Vie", "Sab"];
 
 function currentMonthKey() {
   return formatEcuadorMonthKey();
 }
 
-function minutesLabel(minutes) {
-  const value = Number(minutes) || 0;
-  const hours = Math.floor(value / 60);
-  const rest = value % 60;
+function dateKeyFromDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
 
-  if (!hours) {
-    return `${rest}m`;
-  }
-
-  return rest ? `${hours}h ${rest}m` : `${hours}h`;
+  return `${year}-${month}-${day}`;
 }
 
-function dayTypeLabel(dayType) {
-  const labels = {
-    workday: "Laboral",
-    weekend_overtime: "Extra",
-    holiday: "Feriado",
-    vacation: "Vacacion",
-    off_day: "Descanso",
-  };
+function getMonthDateKeys(monthKey) {
+  const [year, month] = monthKey.split("-").map(Number);
+  const start = new Date(year, month - 1, 1, 12);
+  const end = new Date(year, month, 1, 12);
+  const dates = [];
 
-  return labels[dayType] || dayType;
+  for (let date = start; date < end; date = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1, 12)) {
+    dates.push(dateKeyFromDate(date));
+  }
+
+  return dates;
+}
+
+function getDayOfWeek(dateKey) {
+  return new Date(`${dateKey}T12:00:00`).getDay();
+}
+
+function getWeekStartKey(dateKey) {
+  const date = new Date(`${dateKey}T12:00:00`);
+  const day = date.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  const monday = new Date(date.getFullYear(), date.getMonth(), date.getDate() + diff, 12);
+
+  return dateKeyFromDate(monday);
+}
+
+function getWeekDateKeys(monthKey, weekStartKey) {
+  return getMonthDateKeys(monthKey).filter((dateKey) => getWeekStartKey(dateKey) === weekStartKey);
 }
 
 function usesVariableSchedule(employee) {
   return VARIABLE_SCHEDULE_AREA_CODES.has(String(employee?.areaCode || "").trim().toUpperCase());
 }
 
-function buildDraftWeeklyPlan(assignment, weeks) {
-  const planByWeek = new Map((assignment?.weeklyPlan || []).map((week) => [week.weekStartKey, week.templateId]));
-
-  if (!planByWeek.size && assignment?.templateId) {
-    return Object.fromEntries(weeks.map((week) => [week.weekStartKey, assignment.templateId]));
+function dayToShiftKey(day) {
+  if (!day || day.dayType === "off_day" || day.dayType === "holiday") {
+    return "off";
   }
 
-  return Object.fromEntries(weeks.map((week) => [week.weekStartKey, planByWeek.get(week.weekStartKey) || ""]));
+  if (day.dayType === "weekend_overtime") {
+    return "extra-08-14";
+  }
+
+  const match = SHIFT_OPTIONS.find((shift) =>
+    shift.dayType === "workday"
+    && shift.startTime === day.startTime
+    && shift.endTime === day.endTime,
+  );
+
+  return match?.key || "08-19";
+}
+
+function buildDraftDays(assignments) {
+  return Object.fromEntries(
+    assignments.map((assignment) => [
+      assignment.employeeId,
+      Object.fromEntries((assignment.generatedDays || []).map((day) => [day.dateKey, dayToShiftKey(day)])),
+    ]),
+  );
 }
 
 function buildPlannerUrl(filters) {
   const params = new URLSearchParams();
 
-  if (filters.monthKey) {
-    params.set("month", filters.monthKey);
-  }
-
-  if (filters.branchCode) {
-    params.set("branchCode", filters.branchCode);
-  }
-
-  if (filters.areaCode) {
-    params.set("areaCode", filters.areaCode);
-  }
-
-  if (filters.roleCode) {
-    params.set("roleCode", filters.roleCode);
-  }
+  if (filters.monthKey) params.set("month", filters.monthKey);
+  if (filters.branchCode) params.set("branchCode", filters.branchCode);
+  if (filters.areaCode) params.set("areaCode", filters.areaCode);
+  if (filters.roleCode) params.set("roleCode", filters.roleCode);
 
   const query = params.toString();
 
   return `${planningModulePath("/planning/monthly")}${query ? `?${query}` : ""}`;
 }
 
+function buildOperationalDay(dateKey, shiftKey) {
+  const shift = SHIFT_BY_KEY.get(shiftKey) || SHIFT_BY_KEY.get("off");
+  const dayOfWeek = getDayOfWeek(dateKey);
+  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+  const dayType = shift.dayType === "workday" && isWeekend ? "weekend_overtime" : shift.dayType;
+
+  return {
+    dateKey,
+    dayType,
+    startTime: shift.startTime,
+    endTime: shift.endTime,
+    lunchDurationMinutes: shift.lunchDurationMinutes,
+    authorizedExtraMinutes: dayType === "weekend_overtime" ? Math.max(shift.authorizedExtraMinutes, 360) : shift.authorizedExtraMinutes,
+  };
+}
+
+function isWorkShift(shiftKey) {
+  return shiftKey && shiftKey !== "off";
+}
+
 export default function SchedulePlanner({ initialFilters = {} }) {
   const router = useRouter();
   const [monthKey, setMonthKey] = useState(initialFilters.month || currentMonthKey());
   const [branchCode, setBranchCode] = useState(initialFilters.branchCode || "");
-  const [areaCode, setAreaCode] = useState(initialFilters.areaCode || "");
+  const [areaCode, setAreaCode] = useState(initialFilters.areaCode || "ALM");
   const [roleCode, setRoleCode] = useState(initialFilters.roleCode || "");
   const [employees, setEmployees] = useState([]);
   const [branches, setBranches] = useState([]);
-  const [templates, setTemplates] = useState([]);
   const [assignments, setAssignments] = useState([]);
-  const [draftWeeklyPlans, setDraftWeeklyPlans] = useState({});
+  const [draftDays, setDraftDays] = useState({});
+  const [selectedWeekIndex, setSelectedWeekIndex] = useState(0);
   const [notice, setNotice] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
   const noticeExitTimeoutRef = useRef(null);
   const noticeRemoveTimeoutRef = useRef(null);
 
+  const weekOptions = useMemo(() => getMonthWeekOptions(monthKey), [monthKey]);
+  const selectedWeek = weekOptions[selectedWeekIndex] || weekOptions[0];
+  const weekDateKeys = useMemo(
+    () => (selectedWeek ? getWeekDateKeys(monthKey, selectedWeek.weekStartKey) : []),
+    [monthKey, selectedWeek],
+  );
+
   const assignmentsByEmployee = useMemo(
     () => new Map(assignments.map((assignment) => [assignment.employeeId, assignment])),
     [assignments],
   );
-  const weekOptions = useMemo(() => getMonthWeekOptions(monthKey), [monthKey]);
 
   const areaOptions = useMemo(() => {
     const options = new Map();
 
     employees.forEach((employee) => {
-      if (employee.isActive === false || !usesVariableSchedule(employee)) {
-        return;
-      }
-
-      if (branchCode && employee.branchCode !== branchCode) {
-        return;
-      }
-
-      if (employee.areaCode) {
-        options.set(employee.areaCode, employee.areaName || employee.areaCode);
-      }
+      if (employee.isActive === false || !usesVariableSchedule(employee)) return;
+      if (branchCode && employee.branchCode !== branchCode) return;
+      if (employee.areaCode) options.set(employee.areaCode, employee.areaName || employee.areaCode);
     });
 
     return [...options.entries()].sort((left, right) => left[1].localeCompare(right[1], "es"));
@@ -125,21 +220,10 @@ export default function SchedulePlanner({ initialFilters = {} }) {
     const options = new Map();
 
     employees.forEach((employee) => {
-      if (employee.isActive === false || !usesVariableSchedule(employee)) {
-        return;
-      }
-
-      if (branchCode && employee.branchCode !== branchCode) {
-        return;
-      }
-
-      if (areaCode && employee.areaCode !== areaCode) {
-        return;
-      }
-
-      if (employee.roleCode) {
-        options.set(employee.roleCode, employee.roleName || employee.roleCode);
-      }
+      if (employee.isActive === false || !usesVariableSchedule(employee)) return;
+      if (branchCode && employee.branchCode !== branchCode) return;
+      if (areaCode && employee.areaCode !== areaCode) return;
+      if (employee.roleCode) options.set(employee.roleCode, employee.roleName || employee.roleCode);
     });
 
     return [...options.entries()].sort((left, right) => left[1].localeCompare(right[1], "es"));
@@ -148,76 +232,79 @@ export default function SchedulePlanner({ initialFilters = {} }) {
   const filteredEmployees = useMemo(
     () =>
       employees.filter((employee) => {
-        if (employee.isActive === false || !usesVariableSchedule(employee)) {
-          return false;
-        }
-
-        if (branchCode && employee.branchCode !== branchCode) {
-          return false;
-        }
-
-        if (areaCode && employee.areaCode !== areaCode) {
-          return false;
-        }
-
+        if (employee.isActive === false || !usesVariableSchedule(employee)) return false;
+        if (branchCode && employee.branchCode !== branchCode) return false;
+        if (areaCode && employee.areaCode !== areaCode) return false;
         return !roleCode || employee.roleCode === roleCode;
       }),
     [areaCode, branchCode, employees, roleCode],
   );
 
-  const templatesByRole = useMemo(() => {
-    const grouped = new Map();
+  const coverageByDay = useMemo(() => {
+    const result = new Map();
 
-    templates.forEach((template) => {
-      const key = `${template.areaCode || ""}:${template.roleCode || ""}`;
+    weekDateKeys.forEach((dateKey) => {
+      const roles = new Map();
 
-      if (!grouped.has(key)) {
-        grouped.set(key, []);
-      }
+      filteredEmployees.forEach((employee) => {
+        const shiftKey = draftDays[employee.id]?.[dateKey] || "off";
 
-      grouped.get(key).push(template);
+        if (!isWorkShift(shiftKey)) return;
+
+        const key = employee.roleCode || "SIN_ROL";
+        const current = roles.get(key) || {
+          roleName: employee.roleName || key,
+          count: 0,
+        };
+
+        roles.set(key, { ...current, count: current.count + 1 });
+      });
+
+      result.set(dateKey, roles);
     });
 
-    return new Map([...grouped.entries()].map(([key, value]) => [key, sortTemplatesByVariant(value)]));
-  }, [templates]);
+    return result;
+  }, [draftDays, filteredEmployees, weekDateKeys]);
 
-  const filteredAssignments = useMemo(
-    () => assignments.filter((assignment) => filteredEmployees.some((employee) => employee.id === assignment.employeeId)),
-    [assignments, filteredEmployees],
-  );
+  const summary = useMemo(() => {
+    let programmedCells = 0;
+    let restAlerts = 0;
+    let coverageAlerts = 0;
+    const roleKeys = new Set(filteredEmployees.map((employee) => employee.roleCode).filter(Boolean));
 
-  const allFilteredEmployeesGenerated = filteredEmployees.length > 0
-    && filteredEmployees.every((employee) => assignmentsByEmployee.has(employee.id));
+    filteredEmployees.forEach((employee) => {
+      const restDays = weekDateKeys.filter((dateKey) => !isWorkShift(draftDays[employee.id]?.[dateKey] || "off")).length;
+      programmedCells += weekDateKeys.filter((dateKey) => draftDays[employee.id]?.[dateKey]).length;
 
-  const summary = useMemo(
-    () =>
-      filteredAssignments.reduce(
-        (totals, assignment) => ({
-          assignedEmployees: totals.assignedEmployees + 1,
-          workdays: totals.workdays + (assignment.summary?.workdays || 0),
-          extraordinaryDays: totals.extraordinaryDays + (assignment.summary?.extraordinaryDays || 0),
-          supplementaryMinutes: totals.supplementaryMinutes + (assignment.summary?.supplementaryMinutes || 0),
-        }),
-        {
-          assignedEmployees: 0,
-          workdays: 0,
-          extraordinaryDays: 0,
-          supplementaryMinutes: 0,
-        },
-      ),
-    [filteredAssignments],
-  );
+      if (weekDateKeys.length >= 7 && restDays < 2) {
+        restAlerts += 1;
+      }
+    });
+
+    weekDateKeys.forEach((dateKey) => {
+      const roles = coverageByDay.get(dateKey) || new Map();
+
+      roleKeys.forEach((roleKey) => {
+        if (!roles.get(roleKey)?.count) {
+          coverageAlerts += 1;
+        }
+      });
+    });
+
+    return {
+      employees: filteredEmployees.length,
+      programmedCells,
+      totalCells: filteredEmployees.length * weekDateKeys.length,
+      restAlerts,
+      coverageAlerts,
+    };
+  }, [coverageByDay, draftDays, filteredEmployees, weekDateKeys]);
 
   const clearNoticeTimers = useCallback(() => {
-    if (noticeExitTimeoutRef.current) {
-      window.clearTimeout(noticeExitTimeoutRef.current);
-      noticeExitTimeoutRef.current = null;
-    }
-
-    if (noticeRemoveTimeoutRef.current) {
-      window.clearTimeout(noticeRemoveTimeoutRef.current);
-      noticeRemoveTimeoutRef.current = null;
-    }
+    if (noticeExitTimeoutRef.current) window.clearTimeout(noticeExitTimeoutRef.current);
+    if (noticeRemoveTimeoutRef.current) window.clearTimeout(noticeRemoveTimeoutRef.current);
+    noticeExitTimeoutRef.current = null;
+    noticeRemoveTimeoutRef.current = null;
   }, []);
 
   const dismissNotice = useCallback(() => {
@@ -232,12 +319,10 @@ export default function SchedulePlanner({ initialFilters = {} }) {
   const showNotice = useCallback((type, message) => {
     clearNoticeTimers();
     setNotice({ type, message, isLeaving: false });
-    noticeExitTimeoutRef.current = window.setTimeout(() => {
-      dismissNotice();
-    }, 4000);
+    noticeExitTimeoutRef.current = window.setTimeout(dismissNotice, 4000);
   }, [clearNoticeTimers, dismissNotice]);
 
-  function replaceFilters(nextFilters) {
+  const replaceFilters = useCallback((nextFilters) => {
     router.replace(buildPlannerUrl({
       monthKey,
       branchCode,
@@ -245,49 +330,33 @@ export default function SchedulePlanner({ initialFilters = {} }) {
       roleCode,
       ...nextFilters,
     }), { scroll: false });
-  }
+  }, [areaCode, branchCode, monthKey, roleCode, router]);
 
   useEffect(() => {
     let isCancelled = false;
 
     async function loadData() {
       try {
-        const [employeesResponse, branchesResponse, templatesResponse] = await Promise.all([
+        const [employeesResponse, branchesResponse] = await Promise.all([
           fetch("/api/employees"),
           fetch("/api/branches"),
-          fetch("/api/planning/base-schedules"),
         ]);
-        const [employeesPayload, branchesPayload, templatesPayload] = await Promise.all([
+        const [employeesPayload, branchesPayload] = await Promise.all([
           employeesResponse.json(),
           branchesResponse.json(),
-          templatesResponse.json(),
         ]);
 
-        if (!employeesResponse.ok) {
-          throw new Error(employeesPayload.error || "No se pudieron cargar los empleados.");
-        }
-
-        if (!branchesResponse.ok) {
-          throw new Error(branchesPayload.error || "No se pudieron cargar las sucursales.");
-        }
-
-        if (!templatesResponse.ok) {
-          throw new Error(templatesPayload.error || "No se pudieron cargar las plantillas.");
-        }
+        if (!employeesResponse.ok) throw new Error(employeesPayload.error || "No se pudieron cargar los empleados.");
+        if (!branchesResponse.ok) throw new Error(branchesPayload.error || "No se pudieron cargar las sucursales.");
 
         if (!isCancelled) {
           setEmployees(employeesPayload.employees || []);
           setBranches(branchesPayload.branches || []);
-          setTemplates(templatesPayload.templates || []);
         }
       } catch (error) {
-        if (!isCancelled) {
-          showNotice("error", error.message);
-        }
+        if (!isCancelled) showNotice("error", error.message);
       } finally {
-        if (!isCancelled) {
-          setIsLoading(false);
-        }
+        if (!isCancelled) setIsLoading(false);
       }
     }
 
@@ -300,9 +369,7 @@ export default function SchedulePlanner({ initialFilters = {} }) {
   }, [clearNoticeTimers, showNotice]);
 
   useEffect(() => {
-    if (isLoading) {
-      return;
-    }
+    if (isLoading) return;
 
     let isCancelled = false;
 
@@ -310,32 +377,21 @@ export default function SchedulePlanner({ initialFilters = {} }) {
       try {
         const params = new URLSearchParams({ month: monthKey });
 
-        if (branchCode) {
-          params.set("branchCode", branchCode);
-        }
+        if (branchCode) params.set("branchCode", branchCode);
 
         const response = await fetch(`/api/planning/schedule-assignments?${params.toString()}`);
         const payload = await response.json();
 
-        if (!response.ok) {
-          throw new Error(payload.error || "No se pudieron cargar las asignaciones.");
-        }
+        if (!response.ok) throw new Error(payload.error || "No se pudieron cargar las asignaciones.");
 
         if (!isCancelled) {
-          setAssignments(payload.assignments || []);
-          setDraftWeeklyPlans(
-            Object.fromEntries(
-              (payload.assignments || []).map((assignment) => [
-                assignment.employeeId,
-                buildDraftWeeklyPlan(assignment, weekOptions),
-              ]),
-            ),
-          );
+          const nextAssignments = payload.assignments || [];
+
+          setAssignments(nextAssignments);
+          setDraftDays(buildDraftDays(nextAssignments));
         }
       } catch (error) {
-        if (!isCancelled) {
-          showNotice("error", error.message);
-        }
+        if (!isCancelled) showNotice("error", error.message);
       }
     }
 
@@ -344,95 +400,82 @@ export default function SchedulePlanner({ initialFilters = {} }) {
     return () => {
       isCancelled = true;
     };
-  }, [branchCode, isLoading, monthKey, showNotice, weekOptions]);
+  }, [branchCode, isLoading, monthKey, showNotice]);
 
-  function assignTemplate(employeeId, weekStartKey, templateId) {
-    setDraftWeeklyPlans((current) => ({
+  function setCell(employeeId, dateKey, shiftKey) {
+    setDraftDays((current) => ({
       ...current,
       [employeeId]: {
         ...(current[employeeId] || {}),
-        [weekStartKey]: templateId,
+        [dateKey]: shiftKey,
       },
     }));
   }
 
-  function saveAssignment(employee) {
-    const employeePlan = draftWeeklyPlans[employee.id] || {};
-    const weeklyPlan = weekOptions.map((week) => ({
-      ...week,
-      templateId: employeePlan[week.weekStartKey] || "",
-    }));
-    const missingWeeks = weeklyPlan.filter((week) => !week.templateId);
+  function generateWeek() {
+    setDraftDays((current) => {
+      const next = { ...current };
+      const employeesByRole = filteredEmployees.reduce((map, employee) => {
+        const key = employee.roleCode || "SIN_ROL";
 
-    if (missingWeeks.length) {
-      showNotice("error", "Selecciona una plantilla para cada semana del empleado.");
-      return;
-    }
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(employee);
+        return map;
+      }, new Map());
 
-    startTransition(async () => {
-      try {
-        const response = await fetch("/api/planning/schedule-assignments", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            monthKey,
-            employeeId: employee.id,
-            weeklyPlan,
-          }),
+      for (const [, roleEmployees] of employeesByRole.entries()) {
+        roleEmployees.forEach((employee, employeeIndex) => {
+          const employeeDays = { ...(next[employee.id] || {}) };
+          const firstRestIndex = roleEmployees.length > 1 ? (employeeIndex * 2) % Math.max(weekDateKeys.length, 1) : 5;
+          const restIndexes = new Set([
+            firstRestIndex,
+            (firstRestIndex + 1) % Math.max(weekDateKeys.length, 1),
+          ]);
+
+          weekDateKeys.forEach((dateKey, dayIndex) => {
+            if (restIndexes.has(dayIndex)) {
+              employeeDays[dateKey] = "off";
+              return;
+            }
+
+            employeeDays[dateKey] = WORK_SHIFT_KEYS[(employeeIndex + dayIndex) % WORK_SHIFT_KEYS.length];
+          });
+
+          next[employee.id] = employeeDays;
         });
-        const payload = await response.json();
-
-        if (!response.ok) {
-          throw new Error(payload.error || "No se pudo asignar el horario.");
-        }
-
-        setAssignments((current) => {
-          const exists = current.some((assignment) => assignment.id === payload.assignment.id);
-
-          return exists
-            ? current.map((assignment) => (assignment.id === payload.assignment.id ? payload.assignment : assignment))
-            : [...current, payload.assignment].sort((left, right) => left.employeeName.localeCompare(right.employeeName));
-        });
-        setDraftWeeklyPlans((current) => ({
-          ...current,
-          [employee.id]: buildDraftWeeklyPlan(payload.assignment, weekOptions),
-        }));
-        showNotice("success", payload.message);
-      } catch (error) {
-        showNotice("error", error.message);
       }
+
+      return next;
     });
+    showNotice("success", "Semana generada. Revisa cobertura y descansos antes de guardar.");
   }
 
-  function generateSchedules() {
+  function saveWeek() {
     startTransition(async () => {
       try {
+        const employeeDays = filteredEmployees.map((employee) => ({
+          employeeId: employee.id,
+          days: weekDateKeys.map((dateKey) =>
+            buildOperationalDay(dateKey, draftDays[employee.id]?.[dateKey] || "off"),
+          ),
+        }));
         const response = await fetch("/api/planning/schedule-assignments", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            action: "generate",
+            action: "operational-save",
             monthKey,
-            branchCode,
-            areaCode,
-            roleCode,
+            employeeDays,
           }),
         });
         const payload = await response.json();
 
-        if (!response.ok) {
-          throw new Error(payload.error || "No se pudieron generar los horarios.");
-        }
+        if (!response.ok) throw new Error(payload.error || "No se pudo guardar la programacion.");
 
-        setAssignments(payload.assignments || []);
-        setDraftWeeklyPlans(
-          Object.fromEntries(
-            (payload.assignments || []).map((assignment) => [
-              assignment.employeeId,
-              buildDraftWeeklyPlan(assignment, weekOptions),
-            ]),
-          ),
-        );
+        const nextAssignments = payload.assignments || [];
+
+        setAssignments(nextAssignments);
+        setDraftDays(buildDraftDays(nextAssignments));
         showNotice("success", payload.message);
       } catch (error) {
         showNotice("error", error.message);
@@ -441,23 +484,13 @@ export default function SchedulePlanner({ initialFilters = {} }) {
   }
 
   function openEmployeeDetail(event, employeeId) {
-    if (event.target.closest("select, button, a")) {
-      return;
-    }
+    if (event.target.closest("select, button, a")) return;
 
     const params = new URLSearchParams({ month: monthKey });
 
-    if (branchCode) {
-      params.set("branchCode", branchCode);
-    }
-
-    if (areaCode) {
-      params.set("areaCode", areaCode);
-    }
-
-    if (roleCode) {
-      params.set("roleCode", roleCode);
-    }
+    if (branchCode) params.set("branchCode", branchCode);
+    if (areaCode) params.set("areaCode", areaCode);
+    if (roleCode) params.set("roleCode", roleCode);
 
     router.push(`${planningModulePath(`/planning/monthly/${employeeId}`)}?${params.toString()}`);
   }
@@ -466,33 +499,14 @@ export default function SchedulePlanner({ initialFilters = {} }) {
     return (
       <section className={styles.loadingScene} aria-live="polite">
         <div className={styles.loadingFilters}>
-          {Array.from({ length: 5 }, (_, index) => (
-            <span key={index} className={styles.skeletonField} />
-          ))}
+          {Array.from({ length: 5 }, (_, index) => <span key={index} className={styles.skeletonField} />)}
         </div>
-
         <div className={styles.loadingMetrics}>
           {Array.from({ length: 4 }, (_, index) => (
             <article key={index}>
               <span className={styles.skeletonTiny} />
               <strong className={styles.skeletonValue} />
             </article>
-          ))}
-        </div>
-
-        <div className={styles.loadingTable}>
-          <div className={styles.loadingTableHeader}>
-            <span className={styles.skeletonTitle} />
-            <span className={styles.skeletonAction} />
-          </div>
-          {Array.from({ length: 5 }, (_, rowIndex) => (
-            <div key={rowIndex} className={styles.skeletonRow}>
-              <span className={styles.skeletonPerson} />
-              <span className={styles.skeletonCell} />
-              <span className={styles.skeletonCell} />
-              <span className={styles.skeletonCell} />
-              <span className={styles.skeletonButton} />
-            </div>
           ))}
         </div>
       </section>
@@ -505,10 +519,10 @@ export default function SchedulePlanner({ initialFilters = {} }) {
 
       <section className={styles.toolbar}>
         <div>
-          <p className={styles.eyebrow}>Programacion</p>
-          <h2>Turnos variables por semana</h2>
+          <p className={styles.eyebrow}>Programacion operativa</p>
+          <h2>Horario semanal sin plantillas</h2>
           <p className={styles.toolbarHint}>
-            Para almacen y bodega. Las areas con horario fijo se toman desde su plantilla base al comparar asistencia.
+            Arma turnos reales por dia. Las preferencias especiales se resuelven moviendo descansos antes de guardar.
           </p>
         </div>
         <label>
@@ -518,6 +532,7 @@ export default function SchedulePlanner({ initialFilters = {} }) {
             value={monthKey}
             onChange={(event) => {
               setMonthKey(event.target.value);
+              setSelectedWeekIndex(0);
               replaceFilters({ monthKey: event.target.value });
             }}
           />
@@ -528,9 +543,8 @@ export default function SchedulePlanner({ initialFilters = {} }) {
             value={branchCode}
             onChange={(event) => {
               setBranchCode(event.target.value);
-              setAreaCode("");
               setRoleCode("");
-              replaceFilters({ branchCode: event.target.value, areaCode: "", roleCode: "" });
+              replaceFilters({ branchCode: event.target.value, roleCode: "" });
             }}
           >
             <option value="">Todas</option>
@@ -570,40 +584,82 @@ export default function SchedulePlanner({ initialFilters = {} }) {
             ))}
           </select>
         </label>
-        <button
-          type="button"
-          className={styles.generateButton}
-          onClick={generateSchedules}
-          disabled={isPending || allFilteredEmployeesGenerated || !filteredEmployees.length}
-        >
-          {isPending ? <RefreshCw size={16} /> : <Wand2 size={16} />}
-          {isPending ? "Generando..." : allFilteredEmployeesGenerated ? "Horarios generados" : "Generar horarios"}
-        </button>
+      </section>
+
+      <section className={styles.weekToolbar}>
+        <div className={styles.weekTabs}>
+          {weekOptions.map((week, index) => (
+            <button
+              key={week.weekStartKey}
+              type="button"
+              className={index === selectedWeekIndex ? styles.activeWeek : ""}
+              onClick={() => setSelectedWeekIndex(index)}
+            >
+              <strong>{week.label}</strong>
+              <span>{week.rangeLabel}</span>
+            </button>
+          ))}
+        </div>
+        <div className={styles.weekActions}>
+          <button type="button" onClick={generateWeek} disabled={isPending || !filteredEmployees.length}>
+            <Wand2 size={16} />
+            Generar semana
+          </button>
+          <button type="button" onClick={saveWeek} disabled={isPending || !filteredEmployees.length}>
+            {isPending ? <RefreshCw size={16} /> : <Save size={16} />}
+            {isPending ? "Guardando..." : "Guardar semana"}
+          </button>
+        </div>
       </section>
 
       <section className={styles.summaryGrid}>
         <article>
-          <span>Asignados</span>
-          <strong>{summary.assignedEmployees}/{filteredEmployees.length}</strong>
+          <span>Empleados</span>
+          <strong>{summary.employees}</strong>
         </article>
         <article>
-          <span>Laborables</span>
-          <strong>{summary.workdays}</strong>
+          <span>Programado</span>
+          <strong>{summary.programmedCells}/{summary.totalCells}</strong>
         </article>
         <article>
-          <span>Extraordinarios</span>
-          <strong>{summary.extraordinaryDays}</strong>
+          <span>Alertas cobertura</span>
+          <strong>{summary.coverageAlerts}</strong>
         </article>
         <article>
-          <span>Suplementarias</span>
-          <strong>{minutesLabel(summary.supplementaryMinutes)}</strong>
+          <span>Alertas descanso</span>
+          <strong>{summary.restAlerts}</strong>
         </article>
+      </section>
+
+      <section className={styles.coveragePanel}>
+        <div className={styles.tableHeader}>
+          <CalendarDays size={18} />
+          <span>Cobertura por rol base</span>
+        </div>
+        <div className={styles.coverageGrid}>
+          {weekDateKeys.map((dateKey) => {
+            const roles = [...(coverageByDay.get(dateKey) || new Map()).values()];
+
+            return (
+              <article key={dateKey}>
+                <strong>{DAY_LABELS[getDayOfWeek(dateKey)]} {dateKey.slice(8)}</strong>
+                {roles.length ? (
+                  roles.map((role) => (
+                    <span key={role.roleName}>{role.roleName}: {role.count}</span>
+                  ))
+                ) : (
+                  <span>Sin cobertura</span>
+                )}
+              </article>
+            );
+          })}
+        </div>
       </section>
 
       <section className={styles.tablePanel}>
         <div className={styles.tableHeader}>
           <CalendarDays size={18} />
-          <span>{filteredEmployees.length} empleados de almacen/bodega para programar</span>
+          <span>{filteredEmployees.length} empleados para programar</span>
         </div>
         <div className={styles.tableWrap}>
           <table className={styles.table}>
@@ -611,22 +667,21 @@ export default function SchedulePlanner({ initialFilters = {} }) {
               <tr>
                 <th>Empleado</th>
                 <th>Rol base</th>
-                {weekOptions.map((week) => (
-                  <th key={week.weekStartKey} className={styles.weekColumn}>
-                    <span>{week.label}</span>
-                    <small>{week.rangeLabel}</small>
+                {weekDateKeys.map((dateKey) => (
+                  <th key={dateKey} className={styles.dayColumn}>
+                    <span>{DAY_LABELS[getDayOfWeek(dateKey)]}</span>
+                    <small>{dateKey.slice(8)}</small>
                   </th>
                 ))}
-                <th className={styles.summaryColumn}>Resumen mensual</th>
-                <th className={styles.actionsColumn}>Acciones</th>
+                <th>Descansos</th>
               </tr>
             </thead>
             <tbody>
               {filteredEmployees.map((employee) => {
+                const restCount = weekDateKeys.filter((dateKey) =>
+                  !isWorkShift(draftDays[employee.id]?.[dateKey] || "off"),
+                ).length;
                 const assignment = assignmentsByEmployee.get(employee.id);
-                const candidateTemplates = templatesByRole.get(`${employee.areaCode || ""}:${employee.roleCode || ""}`) || [];
-                const employeePlan = draftWeeklyPlans[employee.id] || buildDraftWeeklyPlan(assignment || {}, weekOptions);
-                const isComplete = weekOptions.every((week) => employeePlan[week.weekStartKey]);
 
                 return (
                   <tr
@@ -640,60 +695,30 @@ export default function SchedulePlanner({ initialFilters = {} }) {
                     </td>
                     <td data-label="Rol base">
                       <strong>{employee.roleName || "Sin rol"}</strong>
-                      <span>{employee.areaName || "Sin area"}</span>
+                      <span>{assignment?.templateName || "Operativo"}</span>
                     </td>
-                    {weekOptions.map((week) => (
-                      <td key={week.weekStartKey} data-label={`${week.label} ${week.rangeLabel}`} className={styles.weekCell}>
+                    {weekDateKeys.map((dateKey) => (
+                      <td key={dateKey} data-label={`${DAY_LABELS[getDayOfWeek(dateKey)]} ${dateKey.slice(8)}`}>
                         <select
-                          value={employeePlan[week.weekStartKey] || ""}
-                          onChange={(event) => assignTemplate(employee.id, week.weekStartKey, event.target.value)}
+                          value={draftDays[employee.id]?.[dateKey] || "off"}
+                          onChange={(event) => setCell(employee.id, dateKey, event.target.value)}
                         >
-                          <option value="">Seleccionar</option>
-                          {candidateTemplates.map((template) => (
-                            <option key={template.id} value={template.id}>
-                              {template.name}
-                            </option>
+                          {SHIFT_OPTIONS.map((shift) => (
+                            <option key={shift.key} value={shift.key}>{shift.label}</option>
                           ))}
                         </select>
                       </td>
                     ))}
-                    <td data-label="Resumen mensual" className={styles.summaryCell}>
-                      {assignment ? (
-                        <div className={styles.monthSummary}>
-                          <span>{assignment.summary.workdays} laborables</span>
-                          <span>{assignment.summary.restDays} descansos</span>
-                          <span>{assignment.summary.holidays} feriados</span>
-                          <span>{assignment.summary.extraordinaryDays} extras</span>
-                        </div>
-                      ) : (
-                        <span className={styles.pending}>Pendiente</span>
-                      )}
-                    </td>
-                    <td data-label="Acciones" className={styles.actionsCell}>
-                      <button type="button" onClick={() => saveAssignment(employee)} disabled={isPending || !isComplete}>
-                        <Save size={15} />
-                        Guardar
-                      </button>
+                    <td data-label="Descansos">
+                      <span className={restCount >= 2 ? styles.okPill : styles.warnPill}>
+                        {restCount} dias
+                      </span>
                     </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
-        </div>
-      </section>
-
-      <section className={styles.previewPanel}>
-        <h3>Lectura del calculo</h3>
-        <p>
-          Esta vista queda reservada para areas variables. Los horarios fijos por area/rol se usan automaticamente
-          en la comparacion de asistencia cuando no existe una asignacion mensual manual.
-        </p>
-        <div className={styles.legend}>
-          <span>{dayTypeLabel("workday")}</span>
-          <span>{dayTypeLabel("weekend_overtime")}</span>
-          <span>{dayTypeLabel("holiday")}</span>
-          <span>{dayTypeLabel("off_day")}</span>
         </div>
       </section>
     </div>

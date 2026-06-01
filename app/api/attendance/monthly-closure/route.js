@@ -89,26 +89,12 @@ function serializePreview(snapshot) {
 
 function approvedSupplementaryMinutes(days = []) {
   return days.reduce((total, day) => {
-    if (day.authorization?.isSaved) {
-      return total + (Number(day.supplementaryMinutes) || 0);
-    }
-
-    const plannedSupplementaryMinutes = Number(day.plannedSupplementaryMinutes) || 0;
-
-    if (plannedSupplementaryMinutes > 0) {
-      return total + Math.min(Number(day.supplementaryMinutes) || 0, plannedSupplementaryMinutes);
-    }
-
-    return total;
+    return total + (Number(day.supplementaryMinutes) || 0);
   }, 0);
 }
 
 function approvedExtraordinaryMinutes(days = []) {
   return days.reduce((total, day) => {
-    if (!day.authorization?.isSaved) {
-      return total;
-    }
-
     return total + (Number(day.extraordinaryMinutes) || 0);
   }, 0);
 }
