@@ -150,8 +150,8 @@ export default async function CompanyHomePage() {
           <MetricCard
             icon={Users}
             label="Personal"
-            value={formatNumber(totals.employees)}
-            help={`${formatNumber(totals.activeEmployees)} activos`}
+            value={formatNumber(totals.activeEmployees)}
+            help={`${formatNumber(totals.employees)} registrados`}
           />
           <MetricCard
             icon={Building2}

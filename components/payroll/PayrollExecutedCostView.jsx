@@ -1,13 +1,16 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, BarChart3, Building2, Clock3, DollarSign, Layers3, RefreshCw, Users } from "lucide-react";
 
 import FloatingNotice from "@/components/ui/FloatingNotice";
+import { formatEcuadorMonthKey } from "@/lib/datetime/ecuador";
+import { planningModulePath } from "@/lib/modules/planning/routes";
 import styles from "./PayrollExecutedCostView.module.scss";
 
 function currentMonthKey() {
-  return new Date().toISOString().slice(0, 7);
+  return formatEcuadorMonthKey();
 }
 
 function formatMoney(value) {
@@ -88,8 +91,9 @@ function GroupTable({ title, icon: Icon, rows }) {
 }
 
 export default function PayrollExecutedCostView() {
-  const initialFiltersRef = useRef(readInitialFilters());
-  const [filters, setFilters] = useState(initialFiltersRef.current);
+  const router = useRouter();
+  const [initialFilters] = useState(() => readInitialFilters());
+  const [filters, setFilters] = useState(() => initialFilters);
   const [payload, setPayload] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [notice, setNotice] = useState(null);
@@ -127,6 +131,10 @@ export default function PayrollExecutedCostView() {
     noticeExitTimeoutRef.current = window.setTimeout(dismissNotice, 4000);
   }, [clearNoticeTimers, dismissNotice]);
 
+  useEffect(() => () => {
+    clearNoticeTimers();
+  }, [clearNoticeTimers]);
+
   function updateFilters(nextValues) {
     const nextFilters = {
       ...filters,
@@ -137,11 +145,24 @@ export default function PayrollExecutedCostView() {
     syncUrl(nextFilters);
   }
 
+  function openEmployeeSummary(row) {
+    if (!row.employeeId) {
+      return;
+    }
+
+    const params = new URLSearchParams();
+    params.set("employeeId", row.employeeId);
+    params.set("month", filters.monthKey);
+    router.push(`${planningModulePath("/payroll/by-employee")}?${params.toString()}`);
+  }
+
   useEffect(() => {
     let isCancelled = false;
 
     async function loadExecutedCost() {
       setIsLoading(true);
+      clearNoticeTimers();
+      setNotice(null);
 
       try {
         const params = new URLSearchParams({ month: filters.monthKey });
@@ -162,7 +183,9 @@ export default function PayrollExecutedCostView() {
       } catch (error) {
         if (!isCancelled) {
           setPayload(null);
-          showNotice("error", error.message);
+          if (!String(error.message || "").includes("Primero guarda el cierre de mes")) {
+            showNotice("error", error.message);
+          }
         }
       } finally {
         if (!isCancelled) {
@@ -175,7 +198,6 @@ export default function PayrollExecutedCostView() {
 
     return () => {
       isCancelled = true;
-      clearNoticeTimers();
     };
   }, [clearNoticeTimers, filters.areaCode, filters.branchCode, filters.monthKey, filters.roleCode, showNotice]);
 
@@ -307,10 +329,24 @@ export default function PayrollExecutedCostView() {
                 </thead>
                 <tbody>
                   {sortedRows.map((row) => (
-                    <tr key={row.employeeId}>
+                    <tr
+                      key={row.employeeId}
+                      className={`${styles.clickableRow} ${row.payment?.isPaid ? styles.paidRow : ""}`}
+                      onClick={() => openEmployeeSummary(row)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          openEmployeeSummary(row);
+                        }
+                      }}
+                      tabIndex={row.employeeId ? 0 : undefined}
+                      role={row.employeeId ? "button" : undefined}
+                      aria-label={`Ver resumen mensual de ${row.employeeName}`}
+                    >
                       <td data-label="Empleado">
                         <strong>{row.employeeName}</strong>
                         <span>{row.branchName}</span>
+                        {row.payment?.isPaid ? <em className={styles.paidBadge}>Pagado</em> : null}
                       </td>
                       <td data-label="Estructura">
                         <strong>{row.areaName}</strong>

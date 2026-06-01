@@ -55,6 +55,51 @@ const roleLunchRuleSchema = new Schema(
   { _id: false },
 );
 
+const payrollNeutralRoleRuleSchema = new Schema(
+  {
+    areaCode: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    areaName: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      default: "",
+    },
+    roleCode: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    roleName: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      default: "",
+    },
+    label: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    scheduleAffectsSalary: {
+      type: Boolean,
+      default: false,
+    },
+    appliesSupplementaryHours: {
+      type: Boolean,
+      default: false,
+    },
+    appliesExtraordinaryHours: {
+      type: Boolean,
+      default: false,
+    },
+  },
+  { _id: false },
+);
+
 const laborRuleConfigSchema = new Schema(
   {
     key: {
@@ -128,6 +173,10 @@ const laborRuleConfigSchema = new Schema(
     },
     roleLunchRules: {
       type: [roleLunchRuleSchema],
+      default: [],
+    },
+    payrollNeutralRoleRules: {
+      type: [payrollNeutralRoleRuleSchema],
       default: [],
     },
     notes: {

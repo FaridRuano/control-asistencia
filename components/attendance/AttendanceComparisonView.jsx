@@ -4,11 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, RefreshCw, Search } from "lucide-react";
 
+import { formatEcuadorMonthKey } from "@/lib/datetime/ecuador";
 import { planningModulePath } from "@/lib/modules/planning/routes";
 import styles from "./AttendanceComparisonView.module.scss";
 
 function currentMonthKey() {
-  return new Date().toISOString().slice(0, 7);
+  return formatEcuadorMonthKey();
 }
 
 function readInitialFilters() {
@@ -61,15 +62,15 @@ function MetricColumn({ label, value, tone = "neutral" }) {
   );
 }
 
+function plannedPunchDays(summary = {}) {
+  return Number(summary.plannedDaysWithPunches ?? summary.daysWithPunches) || 0;
+}
+
 export default function AttendanceComparisonView() {
   const router = useRouter();
-  const initialFiltersRef = useRef(null);
-
-  if (!initialFiltersRef.current) {
-    initialFiltersRef.current = readInitialFilters();
-  }
-
-  const [filters, setFilters] = useState(initialFiltersRef.current);
+  const [initialFilters] = useState(() => readInitialFilters());
+  const initialFiltersRef = useRef(initialFilters);
+  const [filters, setFilters] = useState(() => initialFilters);
   const [employees, setEmployees] = useState([]);
   const [branches, setBranches] = useState([]);
   const [rows, setRows] = useState([]);
@@ -220,8 +221,14 @@ export default function AttendanceComparisonView() {
   }
 
   useEffect(() => {
-    loadCatalogs();
-    loadComparison(initialFiltersRef.current);
+    const timeoutId = window.setTimeout(() => {
+      loadCatalogs();
+      loadComparison(initialFiltersRef.current);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
   }, []);
 
   return (
@@ -340,10 +347,10 @@ export default function AttendanceComparisonView() {
                         {row.hasSchedule ? (
                           <div className={styles.metricColumn}>
                             <MetricColumn label="Días" value={row.summary.plannedDays} tone="planned" />
-                            <MetricColumn label="Con picadas" value={row.summary.daysWithPunches} tone="worked" />
+                            <MetricColumn label="Con picadas" value={plannedPunchDays(row.summary)} tone="worked" />
                             <MetricColumn
                               label="Sin picadas"
-                              value={Math.max(0, row.summary.plannedDays - row.summary.daysWithPunches)}
+                              value={Math.max(0, row.summary.plannedDays - plannedPunchDays(row.summary))}
                               tone="muted"
                             />
                           </div>

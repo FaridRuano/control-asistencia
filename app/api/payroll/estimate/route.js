@@ -164,6 +164,7 @@ export async function GET(request) {
       supplementaryByDate,
       lateByDate,
       incompleteDayByDate,
+      laborRules: rules || {},
     });
 
     return NextResponse.json(estimate);

@@ -1,20 +1,22 @@
 import DashboardShell from "@/components/dashboard/DashboardShell";
-import ModuleScaffold from "@/components/dashboard/ModuleScaffold";
+import EmployeeMonthlySummaryView from "@/components/payroll/EmployeeMonthlySummaryView";
+import { formatEcuadorMonthKey } from "@/lib/datetime/ecuador";
 
 export const metadata = {
   title: "Resumen por empleado | Control de Asistencia",
 };
 
-export default function PayrollByEmployeePage() {
+export default async function PayrollByEmployeePage({ searchParams }) {
+  const resolvedSearchParams = await searchParams;
+
   return (
     <DashboardShell
       title="Resumen por empleado"
-      description="Página base para la vista individual consolidada del período."
+      description="Consulta mensual individual con salario, horas planificadas, horas registradas, autorizaciones, novedades y valores por día."
     >
-      <ModuleScaffold
-        eyebrow="Nómina y costos"
-        title="Ficha económica individual"
-        description="Aquí quedará el detalle por empleado de sueldo base, horas planificadas, ejecutadas, extras, atrasos, ausencias y diferencias del mes."
+      <EmployeeMonthlySummaryView
+        initialEmployeeId={resolvedSearchParams?.employeeId || ""}
+        initialMonth={resolvedSearchParams?.month || formatEcuadorMonthKey()}
       />
     </DashboardShell>
   );

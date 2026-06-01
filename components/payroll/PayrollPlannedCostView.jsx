@@ -6,11 +6,12 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, BarChart3, Building2, Clock3, DollarSign, Layers3, Users } from "lucide-react";
 
 import FloatingNotice from "@/components/ui/FloatingNotice";
+import { formatEcuadorMonthKey } from "@/lib/datetime/ecuador";
 import { planningModulePath } from "@/lib/modules/planning/routes";
 import styles from "./PayrollPlannedCostView.module.scss";
 
 function currentMonthKey() {
-  return new Date().toISOString().slice(0, 7);
+  return formatEcuadorMonthKey();
 }
 
 function formatMoney(value) {

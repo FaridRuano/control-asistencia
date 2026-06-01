@@ -12,6 +12,7 @@ import {
   getWeekStartKey,
   sortTemplatesByVariant,
 } from "@/lib/planning/scheduleAssignments";
+import { formatEcuadorMonthKey } from "@/lib/datetime/ecuador";
 import { planningModulePath } from "@/lib/modules/planning/routes";
 import { WEEK_DAYS } from "@/lib/schedules";
 import styles from "./EmployeeScheduleDetail.module.scss";
@@ -19,7 +20,7 @@ import styles from "./EmployeeScheduleDetail.module.scss";
 const DAY_LABELS = new Map(WEEK_DAYS.map((day) => [day.dayOfWeek, day.label]));
 
 function currentMonthKey() {
-  return new Date().toISOString().slice(0, 7);
+  return formatEcuadorMonthKey();
 }
 
 function scheduleLine(day) {

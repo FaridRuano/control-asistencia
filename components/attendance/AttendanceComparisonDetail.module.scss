@@ -5,7 +5,9 @@
 }
 
 .topbar,
-.identity,
+.identityPanel,
+.bulkActions,
+.metricGrid article,
 .tableShell,
 .errorBox,
 .loadingScene {
@@ -17,10 +19,8 @@
 
 .topbar {
   display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  align-items: end;
-  padding: 1rem;
+  justify-content: flex-start;
+  padding: 0.7rem;
 }
 
 .backLink {
@@ -60,27 +60,117 @@
   padding: 0 0.75rem;
 }
 
-.identity {
+.identityPanel {
   display: flex;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 1.2rem;
   align-items: center;
   padding: 1rem;
 }
 
-.identity strong {
+.employeeIdentity {
+  min-width: 0;
+}
+
+.employeeIdentity strong {
   display: block;
   font-size: 1.05rem;
 }
 
-.identity span {
-  display: block;
-  margin-top: 0.22rem;
+.identityMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.45rem;
+}
+
+.identityMeta span {
+  width: fit-content;
+  border-radius: 999px;
+  background: #f8fafc;
   color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 800;
+  padding: 0.28rem 0.55rem;
+}
+
+.metricGrid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(9rem, 1fr));
+  gap: 0.75rem;
+}
+
+.metricGrid article {
+  display: grid;
+  gap: 0.3rem;
+  min-height: 5.2rem;
+  align-content: center;
+  padding: 0.9rem 1rem;
+}
+
+.metricGrid article span {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 800;
+}
+
+.metricGrid article strong {
+  color: var(--text);
+  font-size: clamp(1.05rem, 1.8vw, 1.45rem);
+  line-height: 1.1;
+}
+
+.metricGrid article small {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 800;
+}
+
+.bulkActions {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.85rem 1rem;
+}
+
+.bulkActions > div:first-child {
+  display: grid;
+  gap: 0.22rem;
+}
+
+.bulkActions strong {
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.bulkActions span {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 800;
+}
+
+.confirmDetails {
+  display: grid;
+  grid-template-columns: minmax(0, 0.55fr) minmax(0, 1fr);
+  gap: 0.45rem 0.85rem;
+  border: 1px solid rgba(16, 33, 62, 0.08);
+  border-radius: 0.85rem;
+  background: #f8fafc;
+  padding: 0.85rem;
+}
+
+.confirmDetails span {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 800;
+}
+
+.confirmDetails strong {
+  color: var(--text);
   font-size: var(--font-size-sm);
 }
 
-.summaryLine,
 .punchList,
 .extraList,
 .tagList {
@@ -89,7 +179,6 @@
   flex-wrap: wrap;
 }
 
-.summaryLine span,
 .punchList span,
 .extraList span,
 .tagList span {
@@ -123,7 +212,7 @@
 
 .tableScroller table {
   width: 100%;
-  min-width: 1180px;
+  min-width: 1420px;
   border-collapse: collapse;
 }
 
@@ -207,13 +296,278 @@
   color: #05603a;
 }
 
-.scheduleLine .unplannedWork {
+.punchLine .lunchTotalWarning {
+  background: #fef3f2;
+  color: #b42318;
+}
+
+.issueTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.issueTag {
+  border-radius: 0.45rem;
   background: #fff4ed;
   color: #b54708;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1;
+  padding: 0.32rem 0.42rem;
+}
+
+.additionalTag {
+  background: #fef3f2;
+  color: #b42318;
 }
 
 .issueRow td {
   background: #fffaf5;
+}
+
+.ignoredRestRow td {
+  background: #f8fafc;
+  color: #64748b;
+  padding-bottom: 0.45rem;
+  padding-top: 0.45rem;
+}
+
+.ignoredRestRow td:first-child,
+.ignoredRestRow td:nth-child(2),
+.ignoredRestRow td:nth-child(3) {
+  vertical-align: middle;
+}
+
+.ignoredRestRow td:nth-child(4),
+.ignoredRestRow td:nth-child(5),
+.ignoredRestRow td:nth-child(6),
+.ignoredRestRow td:nth-child(7) {
+  color: #94a3b8;
+  opacity: 0.55;
+}
+
+.ignoredRestRow .timelineCell {
+  gap: 0.25rem;
+  min-width: 16rem;
+}
+
+.ignoredRestRow .scheduleLine {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.ignoredRestRow .punchLine,
+.ignoredRestRow .extraList,
+.ignoredRestRow .valueCell,
+.ignoredRestRow td:nth-child(5) span,
+.ignoredRestRow td:nth-child(6) span,
+.ignoredRestRow td:nth-child(7) span {
+  display: none;
+}
+
+.ignoredRestRow .scheduleLine span {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.valueCell {
+  display: grid;
+  gap: 0.65rem;
+  min-width: 10rem;
+}
+
+.valueCell > strong {
+  margin-bottom: 0.08rem;
+}
+
+.tableScroller .valueHint {
+  width: fit-content;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: #1550a0;
+  font-size: 0.68rem;
+  font-weight: 900;
+  padding: 0.22rem 0.5rem;
+}
+
+.tableScroller .valueHintAuthorized {
+  background: #ecfdf3;
+  color: #05603a;
+}
+
+.tableScroller .valueHintWarning {
+  background: #fff4ed;
+  color: #b54708;
+}
+
+.valueBreakdown {
+  display: grid;
+  gap: 0.38rem;
+  margin-top: 0.1rem;
+}
+
+.tableScroller .valueBreakdown span {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.8rem;
+  align-items: baseline;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.valueBreakdown small {
+  min-width: 0;
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
+.valueBreakdown b {
+  color: var(--text-main);
+  font-size: var(--font-size-sm);
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.valueBreakdown .deductionValue {
+  color: #b42318;
+}
+
+.actionableRow {
+  cursor: pointer;
+}
+
+.actionableRow:hover td {
+  background: #f8fbff;
+}
+
+.actionableRow:focus {
+  outline: 2px solid rgba(21, 80, 160, 0.28);
+  outline-offset: -2px;
+}
+
+.decisionModal {
+  display: grid;
+  gap: 1rem;
+}
+
+.decisionSummary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.decisionSummary article {
+  display: grid;
+  gap: 0.18rem;
+  border: 1px solid rgba(16, 33, 62, 0.08);
+  border-radius: 0.85rem;
+  background: #f8fafc;
+  padding: 0.75rem;
+}
+
+.decisionSummary span,
+.decisionSummary small,
+.modalForm span {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.decisionSummary strong {
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.previewBreakdown {
+  display: grid;
+  gap: 0.45rem;
+  border: 1px solid rgba(16, 33, 62, 0.08);
+  border-radius: 0.85rem;
+  background: #fff;
+  padding: 0.8rem;
+}
+
+.previewBreakdown div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--text-muted);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.previewBreakdown strong {
+  color: var(--text);
+  font-size: 0.92rem;
+  font-weight: 900;
+  text-align: right;
+}
+
+.previewBreakdown .previewTotal {
+  border-top: 1px solid rgba(16, 33, 62, 0.08);
+  margin-top: 0.25rem;
+  padding-top: 0.55rem;
+  color: var(--text);
+  font-weight: 900;
+}
+
+.modalPunches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.modalPunches span {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 0.35rem;
+  align-items: center;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #1f2937;
+  font-weight: 900;
+  padding: 0.35rem 0.65rem;
+}
+
+.modalPunches small {
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  font-weight: 800;
+}
+
+.modalForm {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.modalForm label {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.modalNote {
+  grid-column: 1 / -1;
+}
+
+.modalForm input,
+.modalForm textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+  background: white;
+  color: var(--text);
+  font: inherit;
+  padding: 0.65rem 0.75rem;
+}
+
+.modalForm input {
+  min-height: 2.55rem;
+}
+
+.modalForm textarea {
+  resize: vertical;
 }
 
 .errorBox {
@@ -251,7 +605,8 @@
 
 @media (max-width: 760px) {
   .topbar,
-  .identity {
+  .identityPanel,
+  .bulkActions {
     align-items: stretch;
     flex-direction: column;
   }
@@ -259,6 +614,16 @@
   .backLink,
   .monthControl {
     width: 100%;
+  }
+
+  .metricGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 761px) and (max-width: 1180px) {
+  .metricGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 

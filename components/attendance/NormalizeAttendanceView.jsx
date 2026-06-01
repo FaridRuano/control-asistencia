@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 
 import styles from "./NormalizeAttendanceView.module.scss";
+import useClientReady from "@/hooks/useClientReady";
 import {
   formatEcuadorDate,
   formatEcuadorDateTime,
@@ -135,11 +136,11 @@ function groupPunchesByDay(punches) {
 }
 
 export default function NormalizeAttendanceView({ uploadId }) {
+  const isClientReady = useClientReady();
   const [response, setResponse] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isPublishingPunches, setIsPublishingPunches] = useState(false);
-  const [isMounted, setIsMounted] = useState(false);
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState(null);
   const toastTimeoutRef = useRef(null);
@@ -253,10 +254,6 @@ export default function NormalizeAttendanceView({ uploadId }) {
   }
 
   useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
-  useEffect(() => {
     let isCancelled = false;
 
     async function fetchNormalizedUpload() {
@@ -317,7 +314,7 @@ export default function NormalizeAttendanceView({ uploadId }) {
 
   return (
     <>
-      {showBlockingOverlay && isMounted
+      {showBlockingOverlay && isClientReady
         ? createPortal(
             <div className={styles.blockingOverlay} role="alert" aria-live="assertive">
               <div className={styles.blockingCard}>

@@ -3,12 +3,13 @@ import { NextResponse } from "next/server";
 import { createAuditLog, resolveAuditActor } from "@/lib/audit";
 import { isAuthenticated } from "@/lib/auth";
 import connectToDatabase from "@/lib/db/mongodb";
+import { formatEcuadorMonthKey } from "@/lib/datetime/ecuador";
 import { parseMonthKey } from "@/lib/planning/holidays";
 import Employee from "@/models/Employee";
 import MonthlyAttendanceClosure from "@/models/MonthlyAttendanceClosure";
 
 function currentMonthKey() {
-  return new Date().toISOString().slice(0, 7);
+  return formatEcuadorMonthKey();
 }
 
 function minutesLabel(minutes) {
@@ -86,27 +87,57 @@ function serializePreview(snapshot) {
   };
 }
 
+function approvedSupplementaryMinutes(days = []) {
+  return days.reduce((total, day) => {
+    if (day.authorization?.isSaved) {
+      return total + (Number(day.supplementaryMinutes) || 0);
+    }
+
+    const plannedSupplementaryMinutes = Number(day.plannedSupplementaryMinutes) || 0;
+
+    if (plannedSupplementaryMinutes > 0) {
+      return total + Math.min(Number(day.supplementaryMinutes) || 0, plannedSupplementaryMinutes);
+    }
+
+    return total;
+  }, 0);
+}
+
+function approvedExtraordinaryMinutes(days = []) {
+  return days.reduce((total, day) => {
+    if (!day.authorization?.isSaved) {
+      return total;
+    }
+
+    return total + (Number(day.extraordinaryMinutes) || 0);
+  }, 0);
+}
+
 function snapshotRows(comparisonRows) {
-  return comparisonRows.map((row) => ({
-    employeeId: row.employee.id,
-    employee: row.employee.id,
-    employeeName: row.employee.fullName,
-    branchCode: row.employee.branchCode,
-    branchName: row.employee.branchName,
-    areaCode: row.employee.areaCode,
-    areaName: row.employee.areaName,
-    roleCode: row.employee.roleCode,
-    roleName: row.employee.roleName,
-    plannedDays: row.summary.plannedDays,
-    daysWithPunches: row.summary.daysWithPunches,
-    missingPunchDays: row.summary.missingPunchDays,
-    unplannedWorkDays: row.summary.unplannedWorkDays,
-    lateDays: row.summary.lateDays,
-    regularWorkedMinutes: row.summary.regularWorkedMinutes,
-    supplementaryMinutes: row.summary.supplementaryMinutes,
-    extraordinaryMinutes: row.summary.extraordinaryMinutes,
-    lateMinutes: row.summary.lateMinutes,
-  }));
+  return comparisonRows.map((row) => {
+    const days = row.days || [];
+
+    return {
+      employeeId: row.employee.id,
+      employee: row.employee.id,
+      employeeName: row.employee.fullName,
+      branchCode: row.employee.branchCode,
+      branchName: row.employee.branchName,
+      areaCode: row.employee.areaCode,
+      areaName: row.employee.areaName,
+      roleCode: row.employee.roleCode,
+      roleName: row.employee.roleName,
+      plannedDays: row.summary.plannedDays,
+      daysWithPunches: row.summary.daysWithPunches,
+      missingPunchDays: row.summary.missingPunchDays,
+      unplannedWorkDays: row.summary.unplannedWorkDays,
+      lateDays: row.summary.lateDays,
+      regularWorkedMinutes: row.summary.regularWorkedMinutes,
+      supplementaryMinutes: approvedSupplementaryMinutes(days),
+      extraordinaryMinutes: approvedExtraordinaryMinutes(days),
+      lateMinutes: row.summary.lateMinutes,
+    };
+  });
 }
 
 function sumTotals(rows) {

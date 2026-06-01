@@ -28,9 +28,18 @@
 .table th, .table td { padding: 0.75rem; border-bottom: 1px solid #e8eef8; text-align: left; vertical-align: middle; }
 .table th { background: #fff; color: #5a6d92; font-size: var(--font-size-sm); }
 .table tbody tr:last-child td { border-bottom: 0; }
-.table td { color: #203756; font-weight: 800; }
+.clickableRow { cursor: pointer; transition: background 160ms ease, box-shadow 160ms ease; }
+.clickableRow:hover { background: #f7faff; }
+.clickableRow:focus-visible { outline: 3px solid rgba(31, 111, 255, 0.2); outline-offset: -3px; }
+.paidRow { background: #f2fbf5; box-shadow: inset 3px 0 0 #2fbe6f; }
+.paidRow:hover { background: #edf9f1; }
+.table td { color: #203756; font-weight: 600; }
 .table td strong, .table td span { display: block; }
-.table td span { margin-top: 0.18rem; color: #6a7890; font-size: var(--font-size-sm); font-weight: 600; }
+.table td strong { font-weight: 700; }
+.table td span { margin-top: 0.18rem; color: #6a7890; font-size: var(--font-size-sm); font-weight: 500; }
+.table td[data-label="Estructura"] strong,
+.table td[data-label="Estructura"] span { font-weight: 500; }
+.paidBadge { display: inline-flex; width: fit-content; margin-top: 0.35rem; border-radius: 999px; background: rgba(47, 190, 111, 0.13); color: #247b4d; padding: 0.18rem 0.48rem; font-size: var(--font-size-xs); font-style: normal; font-weight: 800; }
 .emptyText { margin: 0.8rem 0 0; color: #6a7890; font-weight: 700; }
 .emptyValue { color: #94a3b8; font-weight: 800; }
 .emptyState { display: flex; align-items: center; gap: 0.55rem; color: #b42318; font-weight: 800; }

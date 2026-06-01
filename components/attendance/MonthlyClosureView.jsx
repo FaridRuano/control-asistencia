@@ -4,10 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, Download, Lock, RefreshCw, Save } from "lucide-react";
 
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import { formatEcuadorMonthKey } from "@/lib/datetime/ecuador";
 import styles from "./MonthlyClosureView.module.scss";
 
 function currentMonthKey() {
-  return new Date().toISOString().slice(0, 7);
+  return formatEcuadorMonthKey();
 }
 
 function readInitialState() {
@@ -39,9 +40,10 @@ function metricValue(value) {
 }
 
 export default function MonthlyClosureView() {
-  const initialStateRef = useRef(readInitialState());
-  const [month, setMonth] = useState(initialStateRef.current.month);
-  const [mode, setMode] = useState(initialStateRef.current.mode);
+  const [initialState] = useState(() => readInitialState());
+  const initialStateRef = useRef(initialState);
+  const [month, setMonth] = useState(() => initialState.month);
+  const [mode, setMode] = useState(() => initialState.mode);
   const [payload, setPayload] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);

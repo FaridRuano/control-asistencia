@@ -25,12 +25,47 @@ const ROLE_LUNCH_RULE_LIST = [
   { areaCode: "CP", areaName: "CARGA PESADA", roleCode: "CHOFE2", roleName: "CHOFER", lunchDurationMinutes: 60 },
 ];
 
+const PAYROLL_NEUTRAL_ROLE_RULE_LIST = [
+  {
+    areaCode: "ADMIN",
+    areaName: "ADMINISTRATIVO",
+    roleCode: "JEFADM",
+    roleName: "JEFATURA",
+    label: "Ajustado al plan por jefatura",
+    scheduleAffectsSalary: false,
+    appliesSupplementaryHours: false,
+    appliesExtraordinaryHours: false,
+  },
+  {
+    areaCode: "GER",
+    areaName: "GERENCIA",
+    roleCode: "GERGEN",
+    roleName: "GERENCIA",
+    label: "Ajustado al plan por gerencia",
+    scheduleAffectsSalary: false,
+    appliesSupplementaryHours: false,
+    appliesExtraordinaryHours: false,
+  },
+  {
+    areaCode: "CP",
+    areaName: "CARGA PESADA",
+    roleCode: "CHOFE2",
+    roleName: "CHOFER",
+    label: "Ajustado al plan por viajes",
+    scheduleAffectsSalary: false,
+    appliesSupplementaryHours: true,
+    appliesExtraordinaryHours: true,
+  },
+];
+
 const ROLE_NOTES = new Map([
   ["BOD|BODEG", "BODEGA/BODEGUERO usa 90 minutos de almuerzo."],
   ["BOD|CHOFER", "BODEGA/CHOFER usa 60 minutos de almuerzo."],
   ["BOD|TECBOD", "BODEGA/TECNICO usa 60 minutos de almuerzo."],
   ["CP|CHOFE2", "CARGA PESADA usa 60 minutos de almuerzo."],
 ]);
+
+const ADMIN_REFERENCE_ROLE_CODES = new Set(["JEFADM"]);
 
 function row(dayOfWeek, dayType, startTime = "", endTime = "", lunchDurationMinutes = 0, authorizedExtraMinutes = 0) {
   const isWorkingDay = dayType === "workday" || dayType === "weekend_overtime";
@@ -94,6 +129,19 @@ function buildTemplatesForRole(area, role) {
   ].filter(Boolean).join(" ");
 
   if (area.code === "ADMIN") {
+    if (ADMIN_REFERENCE_ROLE_CODES.has(role.code)) {
+      return [
+        template({
+          name: `ADMINISTRATIVO ${role.name} REFERENCIAL 08H00`,
+          area,
+          role,
+          rotationGroup: "ADMIN_BASE",
+          rows: baseRows({ startTime: "08:00", endTime: "18:00", lunchDurationMinutes, authorizedExtraMinutes: 0 }),
+          notes: "Horario referencial de lunes a viernes. No requiere picadas y no genera horas suplementarias ni extraordinarias.",
+        }),
+      ];
+    }
+
     return [
       template({
         name: `ADMINISTRATIVO ${role.name} BASE 08H00`,
@@ -122,68 +170,12 @@ function buildTemplatesForRole(area, role) {
   if (area.code === "CP") {
     return [
       template({
-        name: "CARGA PESADA CHOFER BASE SEMANA A 07H00",
+        name: "CARGA PESADA CHOFER BASE 08H00",
         area,
         role,
         rotationGroup: "CP_BASE",
-        rows: baseRows({ startTime: "07:00", endTime: "17:00", lunchDurationMinutes }),
-        notes: `${note} Fin de semana libre; se asigna solo si la operacion lo requiere.`,
-      }),
-      template({
-        name: "CARGA PESADA CHOFER BASE SEMANA B 08H00",
-        area,
-        role,
-        rotationGroup: "CP_BASE",
-        rows: baseRows({ startTime: "08:00", endTime: "18:00", lunchDurationMinutes }),
-        notes: `${note} Alternativa de entrada con fin de semana libre.`,
-      }),
-      template({
-        name: "CARGA PESADA CHOFER SABADO SEMANA A 07H00",
-        area,
-        role,
-        rotationGroup: "CP_SABADO",
-        rows: weeklyRows({ startTime: "07:00", endTime: "17:00", lunchDurationMinutes, saturday: true }),
-        notes: `${note} Semana A con sabado extraordinario.`,
-      }),
-      template({
-        name: "CARGA PESADA CHOFER SABADO SEMANA B 08H00",
-        area,
-        role,
-        rotationGroup: "CP_SABADO",
-        rows: weeklyRows({ startTime: "08:00", endTime: "18:00", lunchDurationMinutes, saturday: true }),
-        notes: `${note} Semana B con sabado extraordinario.`,
-      }),
-      template({
-        name: "CARGA PESADA CHOFER DOMINGO SEMANA A 07H00",
-        area,
-        role,
-        rotationGroup: "CP_DOMINGO",
-        rows: weeklyRows({ startTime: "07:00", endTime: "17:00", lunchDurationMinutes, sunday: true }),
-        notes: `${note} Semana A con domingo extraordinario y sabado libre.`,
-      }),
-      template({
-        name: "CARGA PESADA CHOFER DOMINGO SEMANA B 08H00",
-        area,
-        role,
-        rotationGroup: "CP_DOMINGO",
-        rows: weeklyRows({ startTime: "08:00", endTime: "18:00", lunchDurationMinutes, sunday: true }),
-        notes: `${note} Semana B con domingo extraordinario y sabado libre.`,
-      }),
-      template({
-        name: "CARGA PESADA CHOFER SABADO DOMINGO SEMANA A 07H00",
-        area,
-        role,
-        rotationGroup: "CP_FIN_SEMANA_COMPLETO",
-        rows: weeklyRows({ startTime: "07:00", endTime: "17:00", lunchDurationMinutes, saturday: true, sunday: true }),
-        notes: `${note} Caso excepcional con sabado y domingo extraordinarios.`,
-      }),
-      template({
-        name: "CARGA PESADA CHOFER SABADO DOMINGO SEMANA B 08H00",
-        area,
-        role,
-        rotationGroup: "CP_FIN_SEMANA_COMPLETO",
-        rows: weeklyRows({ startTime: "08:00", endTime: "18:00", lunchDurationMinutes, saturday: true, sunday: true }),
-        notes: `${note} Caso excepcional alterno con sabado y domingo extraordinarios.`,
+        rows: baseRows({ startTime: "08:00", endTime: "17:00", lunchDurationMinutes, authorizedExtraMinutes: 0 }),
+        notes: "Lunes a viernes: 8h normales sin suplementaria planificada. CARGA PESADA usa 60 minutos de almuerzo. Sabado y domingo quedan como descanso opcional; si hay viajes con picadas, se revisan como extraordinarias sin crear variantes de horario.",
       }),
     ];
   }
@@ -424,6 +416,7 @@ async function main() {
         vacationIncludesSupplementaryHour: false,
         areaLunchRules: AREA_LUNCH_RULES,
         roleLunchRules: ROLE_LUNCH_RULE_LIST,
+        payrollNeutralRoleRules: PAYROLL_NEUTRAL_ROLE_RULE_LIST,
         notes: "Defaults operativos: 8h normales + 1h suplementaria autorizada de lunes a viernes. Sabados, domingos y feriados trabajados se tratan como extraordinarios. BODEGA/CHOFER y BODEGA/TECNICO usan 60 min de almuerzo aunque el default del area BODEGA sea 90 min.",
       },
     },

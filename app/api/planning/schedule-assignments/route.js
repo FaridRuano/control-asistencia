@@ -15,6 +15,8 @@ import Employee from "@/models/Employee";
 import Holiday from "@/models/Holiday";
 import ScheduleAssignment from "@/models/ScheduleAssignment";
 
+const VARIABLE_SCHEDULE_AREA_CODES = new Set(["ALM", "BOD"]);
+
 export async function GET(request) {
   const authenticated = await isAuthenticated();
 
@@ -79,7 +81,9 @@ export async function POST(request) {
       }
 
       if (areaCode) {
-        employeeQuery.areaCode = areaCode;
+        employeeQuery.areaCode = VARIABLE_SCHEDULE_AREA_CODES.has(areaCode) ? areaCode : "__fixed_schedule_area__";
+      } else {
+        employeeQuery.areaCode = { $in: [...VARIABLE_SCHEDULE_AREA_CODES] };
       }
 
       if (roleCode) {

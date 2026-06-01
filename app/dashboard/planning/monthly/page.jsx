@@ -15,8 +15,8 @@ export default async function PlanningMonthlyPage({ searchParams }) {
 
   return (
     <DashboardShell
-      title="Programacion de horarios"
-      description="Asigna plantillas por empleado, sucursal y mes; el sistema calcula los dias reales del periodo y sus semanas parciales."
+      title="Programacion operativa"
+      description="Administra turnos variables de almacen y bodega; las areas de horario fijo se resuelven desde su configuracion base."
     >
       <SchedulePlanner initialFilters={{ month, branchCode, areaCode, roleCode }} />
     </DashboardShell>

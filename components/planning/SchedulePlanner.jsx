@@ -5,12 +5,15 @@ import { useRouter } from "next/navigation";
 import { CalendarDays, RefreshCw, Save, Wand2 } from "lucide-react";
 
 import FloatingNotice from "@/components/ui/FloatingNotice";
+import { formatEcuadorMonthKey } from "@/lib/datetime/ecuador";
 import { planningModulePath } from "@/lib/modules/planning/routes";
 import { getMonthWeekOptions, sortTemplatesByVariant } from "@/lib/planning/scheduleAssignments";
 import styles from "./SchedulePlanner.module.scss";
 
+const VARIABLE_SCHEDULE_AREA_CODES = new Set(["ALM", "BOD"]);
+
 function currentMonthKey() {
-  return new Date().toISOString().slice(0, 7);
+  return formatEcuadorMonthKey();
 }
 
 function minutesLabel(minutes) {
@@ -35,6 +38,10 @@ function dayTypeLabel(dayType) {
   };
 
   return labels[dayType] || dayType;
+}
+
+function usesVariableSchedule(employee) {
+  return VARIABLE_SCHEDULE_AREA_CODES.has(String(employee?.areaCode || "").trim().toUpperCase());
 }
 
 function buildDraftWeeklyPlan(assignment, weeks) {
@@ -98,7 +105,7 @@ export default function SchedulePlanner({ initialFilters = {} }) {
     const options = new Map();
 
     employees.forEach((employee) => {
-      if (employee.isActive === false) {
+      if (employee.isActive === false || !usesVariableSchedule(employee)) {
         return;
       }
 
@@ -118,7 +125,7 @@ export default function SchedulePlanner({ initialFilters = {} }) {
     const options = new Map();
 
     employees.forEach((employee) => {
-      if (employee.isActive === false) {
+      if (employee.isActive === false || !usesVariableSchedule(employee)) {
         return;
       }
 
@@ -141,7 +148,7 @@ export default function SchedulePlanner({ initialFilters = {} }) {
   const filteredEmployees = useMemo(
     () =>
       employees.filter((employee) => {
-        if (employee.isActive === false) {
+        if (employee.isActive === false || !usesVariableSchedule(employee)) {
           return false;
         }
 
@@ -499,7 +506,10 @@ export default function SchedulePlanner({ initialFilters = {} }) {
       <section className={styles.toolbar}>
         <div>
           <p className={styles.eyebrow}>Programacion</p>
-          <h2>Horarios por empleado</h2>
+          <h2>Turnos variables por semana</h2>
+          <p className={styles.toolbarHint}>
+            Para almacen y bodega. Las areas con horario fijo se toman desde su plantilla base al comparar asistencia.
+          </p>
         </div>
         <label>
           <span>Mes</span>
@@ -593,7 +603,7 @@ export default function SchedulePlanner({ initialFilters = {} }) {
       <section className={styles.tablePanel}>
         <div className={styles.tableHeader}>
           <CalendarDays size={18} />
-          <span>{filteredEmployees.length} empleados para programar</span>
+          <span>{filteredEmployees.length} empleados de almacen/bodega para programar</span>
         </div>
         <div className={styles.tableWrap}>
           <table className={styles.table}>
@@ -676,9 +686,8 @@ export default function SchedulePlanner({ initialFilters = {} }) {
       <section className={styles.previewPanel}>
         <h3>Lectura del calculo</h3>
         <p>
-          La plantilla semanal se expande solo sobre los dias reales del mes seleccionado.
-          Si el mes empieza o termina a mitad de semana, el sistema toma unicamente esos dias.
-          Los feriados registrados reemplazan el dia de plantilla como feriado.
+          Esta vista queda reservada para areas variables. Los horarios fijos por area/rol se usan automaticamente
+          en la comparacion de asistencia cuando no existe una asignacion mensual manual.
         </p>
         <div className={styles.legend}>
           <span>{dayTypeLabel("workday")}</span>

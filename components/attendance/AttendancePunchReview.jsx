@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import CatalogDrawer from "@/components/catalog/CatalogDrawer";
+import useClientReady from "@/hooks/useClientReady";
 import styles from "./AttendancePunchReview.module.scss";
 
 function toDateInput(value) {
@@ -87,21 +88,16 @@ const DEFAULT_PAGINATION = {
 };
 
 export default function AttendancePunchReview() {
-  const initialFiltersRef = useRef(null);
-
-  if (!initialFiltersRef.current) {
-    initialFiltersRef.current = readInitialFilters();
-  }
-
-  const initialFilters = initialFiltersRef.current;
+  const isClientReady = useClientReady();
+  const [initialFilters] = useState(() => readInitialFilters());
   const [employees, setEmployees] = useState([]);
   const [branches, setBranches] = useState([]);
   const [punches, setPunches] = useState([]);
-  const [filters, setFilters] = useState(initialFilters.filters);
-  const [branchCode, setBranchCode] = useState(initialFilters.branchCode);
-  const [employeeId, setEmployeeId] = useState(initialFilters.employeeId);
-  const [page, setPage] = useState(initialFilters.page);
-  const [pageSize, setPageSize] = useState(initialFilters.pageSize);
+  const [filters, setFilters] = useState(() => initialFilters.filters);
+  const [branchCode, setBranchCode] = useState(() => initialFilters.branchCode);
+  const [employeeId, setEmployeeId] = useState(() => initialFilters.employeeId);
+  const [page, setPage] = useState(() => initialFilters.page);
+  const [pageSize, setPageSize] = useState(() => initialFilters.pageSize);
   const [pagination, setPagination] = useState(DEFAULT_PAGINATION);
   const [form, setForm] = useState({ employeeId: "", punchedAt: "", reason: "" });
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -110,7 +106,6 @@ export default function AttendancePunchReview() {
   const [isCatalogLoading, setIsCatalogLoading] = useState(true);
   const [isPunchesLoading, setIsPunchesLoading] = useState(true);
   const [isMutating, setIsMutating] = useState(false);
-  const [isMounted, setIsMounted] = useState(false);
   const [toast, setToast] = useState(null);
   const toastTimeoutRef = useRef(null);
   const punchesRequestRef = useRef(0);
@@ -363,13 +358,12 @@ export default function AttendancePunchReview() {
   }
 
   useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
-  useEffect(() => {
-    loadInitial();
+    const timeoutId = window.setTimeout(() => {
+      loadInitial();
+    }, 0);
 
     return () => {
+      window.clearTimeout(timeoutId);
       if (toastTimeoutRef.current) {
         clearTimeout(toastTimeoutRef.current);
       }
@@ -377,7 +371,13 @@ export default function AttendancePunchReview() {
   }, []);
 
   useEffect(() => {
-    loadPunches(page, pageSize);
+    const timeoutId = window.setTimeout(() => {
+      loadPunches(page, pageSize);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
   }, [branchCode, employeeId, filters.from, filters.to, page, pageSize]);
 
   useEffect(() => {
@@ -386,9 +386,17 @@ export default function AttendancePunchReview() {
     }
 
     if (employeeId && !filteredEmployees.some((employee) => employee.id === employeeId)) {
-      setEmployeeId("");
-      syncUrlParams({ nextEmployeeId: "", nextPage: 1 });
+      const timeoutId = window.setTimeout(() => {
+        setEmployeeId("");
+        syncUrlParams({ nextEmployeeId: "", nextPage: 1 });
+      }, 0);
+
+      return () => {
+        window.clearTimeout(timeoutId);
+      };
     }
+
+    return undefined;
   }, [employeeId, filteredEmployees, isCatalogLoading]);
 
   useEffect(() => {
@@ -421,7 +429,7 @@ export default function AttendancePunchReview() {
         </div>
       ) : null}
 
-      {deleteTarget && isMounted
+      {deleteTarget && isClientReady
         ? createPortal(
             <div className={styles.modalBackdrop}>
               <div className={styles.modal}>

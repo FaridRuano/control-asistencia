@@ -22,6 +22,7 @@ const DEFAULT_RULES = {
   vacationIncludesSupplementaryHour: false,
   areaLunchRules: [],
   roleLunchRules: [],
+  payrollNeutralRoleRules: [],
   notes: "",
 };
 
@@ -54,6 +55,16 @@ function buildComparableRules(value) {
       roleCode: String(rule?.roleCode || "").trim(),
       roleName: String(rule?.roleName || "").trim(),
       lunchDurationMinutes: toNumber(rule?.lunchDurationMinutes),
+    })),
+    payrollNeutralRoleRules: (value?.payrollNeutralRoleRules || []).map((rule) => ({
+      areaCode: String(rule?.areaCode || "").trim(),
+      areaName: String(rule?.areaName || "").trim(),
+      roleCode: String(rule?.roleCode || "").trim(),
+      roleName: String(rule?.roleName || "").trim(),
+      label: String(rule?.label || "").trim(),
+      scheduleAffectsSalary: Boolean(rule?.scheduleAffectsSalary),
+      appliesSupplementaryHours: Boolean(rule?.appliesSupplementaryHours),
+      appliesExtraordinaryHours: Boolean(rule?.appliesExtraordinaryHours),
     })),
     notes: String(value?.notes || "").trim(),
   };
@@ -205,6 +216,56 @@ export default function LaborRulesManager() {
     });
   }
 
+  function updatePayrollNeutralRoleRule(index, updates) {
+    setRules((current) => ({
+      ...current,
+      payrollNeutralRoleRules: current.payrollNeutralRoleRules.map((rule, ruleIndex) =>
+        ruleIndex === index ? { ...rule, ...updates } : rule,
+      ),
+    }));
+  }
+
+  function addPayrollNeutralRoleRule() {
+    setRules((current) => ({
+      ...current,
+      payrollNeutralRoleRules: [
+        ...current.payrollNeutralRoleRules,
+        {
+          areaCode: "",
+          areaName: "",
+          roleCode: "",
+          roleName: "",
+          label: "",
+          scheduleAffectsSalary: false,
+          appliesSupplementaryHours: false,
+          appliesExtraordinaryHours: false,
+        },
+      ],
+    }));
+  }
+
+  function removePayrollNeutralRoleRule(index) {
+    setRules((current) => ({
+      ...current,
+      payrollNeutralRoleRules: current.payrollNeutralRoleRules.filter((_, ruleIndex) => ruleIndex !== index),
+    }));
+  }
+
+  function handlePayrollNeutralRoleSelection(index, roleKey) {
+    const [areaCode = "", roleCode = ""] = roleKey.split("|");
+    const selectedRole = roles.find(
+      (role) => role.areaCode === areaCode && role.code === roleCode,
+    );
+
+    updatePayrollNeutralRoleRule(index, {
+      areaCode,
+      areaName: selectedRole?.areaName || "",
+      roleCode,
+      roleName: selectedRole?.name || "",
+      label: selectedRole ? `Ajustado al plan por ${selectedRole.name.toLowerCase()}` : "",
+    });
+  }
+
   useEffect(() => {
     let isCancelled = false;
 
@@ -245,6 +306,9 @@ export default function LaborRulesManager() {
               knownAreaCodes.has(rule.areaCode),
             ),
             roleLunchRules: (rulesPayload.rules?.roleLunchRules || []).filter((rule) =>
+              knownRoleKeys.has(`${rule.areaCode}|${rule.roleCode}`),
+            ),
+            payrollNeutralRoleRules: (rulesPayload.rules?.payrollNeutralRoleRules || []).filter((rule) =>
               knownRoleKeys.has(`${rule.areaCode}|${rule.roleCode}`),
             ),
           };
@@ -522,6 +586,106 @@ export default function LaborRulesManager() {
               >
                 <Trash2 size={16} />
               </button>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className={styles.panel}>
+        <div className={styles.panelHeader}>
+          <div>
+            <p className={styles.eyebrow}>Nomina por rol</p>
+            <h2 className={styles.title}>Politicas por rol</h2>
+            <p className={styles.description}>
+              Define si el horario descuenta sueldo y si las horas suplementarias o extraordinarias aplican para cada rol.
+            </p>
+          </div>
+          <button type="button" className={styles.ghostButton} onClick={addPayrollNeutralRoleRule}>
+            <Plus size={16} />
+            Agregar rol
+          </button>
+        </div>
+
+        <div className={styles.neutralRows}>
+          {rules.payrollNeutralRoleRules.map((rule, index) => (
+            <div key={`${rule.areaCode}-${rule.roleCode}-${index}`} className={styles.neutralRow}>
+              <div className={styles.policyHeader}>
+                <label className={styles.field}>
+                  <span>Rol</span>
+                  <select
+                    value={rule.areaCode && rule.roleCode ? `${rule.areaCode}|${rule.roleCode}` : ""}
+                    onChange={(event) => handlePayrollNeutralRoleSelection(index, event.target.value)}
+                  >
+                    <option value="">Seleccionar rol</option>
+                    {roles.map((role) => (
+                      <option key={`${role.areaCode}-${role.code}`} value={`${role.areaCode}|${role.code}`}>
+                        {role.areaName} · {role.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className={styles.field}>
+                  <span>Etiqueta</span>
+                  <input
+                    type="text"
+                    value={rule.label || ""}
+                    placeholder="Ajustado al plan"
+                    onChange={(event) =>
+                      updatePayrollNeutralRoleRule(index, { label: event.target.value })
+                    }
+                  />
+                </label>
+                <button
+                  type="button"
+                  className={styles.iconButton}
+                  onClick={() => removePayrollNeutralRoleRule(index)}
+                  aria-label="Eliminar rol con picadas referenciales"
+                  title="Eliminar regla"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+              <div className={styles.policyToggles}>
+                <button
+                  type="button"
+                  className={`catalog-switch ${rule.scheduleAffectsSalary ? "is-active" : ""}`}
+                  onClick={() =>
+                    updatePayrollNeutralRoleRule(index, {
+                      scheduleAffectsSalary: !rule.scheduleAffectsSalary,
+                    })
+                  }
+                  aria-pressed={Boolean(rule.scheduleAffectsSalary)}
+                >
+                  <span className="catalog-switchKnob" />
+                  <span>Horario afecta sueldo</span>
+                </button>
+                <button
+                  type="button"
+                  className={`catalog-switch ${rule.appliesSupplementaryHours ? "is-active" : ""}`}
+                  onClick={() =>
+                    updatePayrollNeutralRoleRule(index, {
+                      appliesSupplementaryHours: !rule.appliesSupplementaryHours,
+                    })
+                  }
+                  aria-pressed={Boolean(rule.appliesSupplementaryHours)}
+                >
+                  <span className="catalog-switchKnob" />
+                  <span>Aplica suplementarias</span>
+                </button>
+                <button
+                  type="button"
+                  className={`catalog-switch ${rule.appliesExtraordinaryHours ? "is-active" : ""}`}
+                  onClick={() =>
+                    updatePayrollNeutralRoleRule(index, {
+                      appliesExtraordinaryHours: !rule.appliesExtraordinaryHours,
+                    })
+                  }
+                  aria-pressed={Boolean(rule.appliesExtraordinaryHours)}
+                >
+                  <span className="catalog-switchKnob" />
+                  <span>Aplica extraordinarias</span>
+                </button>
+              </div>
             </div>
           ))}
         </div>

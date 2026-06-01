@@ -7,6 +7,7 @@ import { parseMonthKey } from "@/lib/planning/holidays";
 import Employee from "@/models/Employee";
 import LaborRuleConfig from "@/models/LaborRuleConfig";
 import MonthlyAttendanceClosure from "@/models/MonthlyAttendanceClosure";
+import PayrollPayment from "@/models/PayrollPayment";
 
 function money(value) {
   return Math.round((Number(value) || 0) * 100) / 100;
@@ -124,13 +125,17 @@ export async function GET(request) {
       return true;
     });
     const employeeIds = filteredRows.map((row) => row.employee).filter(Boolean);
-    const [employees, rules] = await Promise.all([
+    const [employees, rules, payments] = await Promise.all([
       employeeIds.length
         ? Employee.find({ _id: { $in: employeeIds } }).select({ salary: 1 }).lean()
         : [],
       LaborRuleConfig.findOne({ key: "default" }).lean(),
+      employeeIds.length
+        ? PayrollPayment.find({ monthKey, employee: { $in: employeeIds }, status: "paid" }).lean()
+        : [],
     ]);
     const salaryByEmployee = new Map(employees.map((employee) => [employee._id.toString(), Number(employee.salary) || 0]));
+    const paymentByEmployee = new Map(payments.map((payment) => [payment.employee?.toString?.() || "", payment]));
     const monthlyBase = await resolveMonthlyBaseHours({
       monthKey,
       year,
@@ -152,6 +157,7 @@ export async function GET(request) {
       const supplementaryCost = supplementaryHours * hourlyRate * supplementaryMultiplier;
       const extraordinaryCost = extraordinaryHours * hourlyRate * extraordinaryMultiplier;
       const lateDeduction = lateHours * hourlyRate;
+      const payment = paymentByEmployee.get(employeeId);
 
       return {
         employeeId,
@@ -173,6 +179,15 @@ export async function GET(request) {
         extraordinaryCost: money(extraordinaryCost),
         lateDeduction: money(lateDeduction),
         totalCost: money(normalCost + supplementaryCost + extraordinaryCost - lateDeduction),
+        payment: payment ? {
+          isPaid: true,
+          paymentMethod: payment.paymentMethod || "",
+          amount: money(payment.amount),
+          paidAt: payment.paidAt || null,
+          paidBy: payment.paidBy || "",
+        } : {
+          isPaid: false,
+        },
       };
     });
     const branchGroups = new Map();

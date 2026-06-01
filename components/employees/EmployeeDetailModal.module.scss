@@ -1,11 +1,15 @@
 .card {
+  min-width: 0;
+  max-width: 100%;
   margin-top: 0.3rem;
   padding-bottom: clamp(1.2rem, 3vh, 2rem);
   display: grid;
   gap: 1rem;
+  overflow-x: hidden;
 }
 
 .summary {
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -16,11 +20,13 @@
   padding: 0.72rem 0.82rem;
 
   p {
+    min-width: 0;
     margin: 0;
     color: #52698d;
     font-size: var(--font-size-sm);
     line-height: 1.35;
     text-align: right;
+    overflow-wrap: anywhere;
   }
 }
 
@@ -97,6 +103,7 @@
 }
 
 .actions {
+  min-width: 0;
   margin-top: 0.15rem;
 }
 
