@@ -135,6 +135,18 @@ function groupPunchesByDay(punches) {
     }));
 }
 
+function getMatchLabel(status) {
+  if (status === "matched") return "Listo";
+  if (status === "inactive") return "Empleado inactivo";
+  return "Sin empleado";
+}
+
+function getMatchClass(status) {
+  if (status === "matched") return styles.matchOk;
+  if (status === "inactive") return styles.matchWarning;
+  return styles.matchDanger;
+}
+
 export default function NormalizeAttendanceView({ uploadId }) {
   const isClientReady = useClientReady();
   const [response, setResponse] = useState(null);
@@ -164,6 +176,13 @@ export default function NormalizeAttendanceView({ uploadId }) {
       return haystack.includes(normalizedSearch);
     });
   }, [response?.employees, search]);
+  const reconciliationRows = useMemo(() => response?.employees || [], [response?.employees]);
+  const reconciliationNeedsAttention = Boolean(
+    (response?.summary?.inactiveEmployees || 0) > 0 ||
+      (response?.summary?.unmatchedEmployees || 0) > 0 ||
+      (response?.summary?.duplicateMinutePunches || 0) > 0 ||
+      (response?.summary?.irregularDays || 0) > 0,
+  );
   const isNormalizationSaved = response?.source === "saved";
   const showBlockingOverlay = isSaving || isPublishingPunches;
 
@@ -402,7 +421,7 @@ export default function NormalizeAttendanceView({ uploadId }) {
                     className={styles.saveButton}
                   >
                     <Save size={16} />
-                    {isSaving ? "Procesando..." : "Guardar y cargar picadas"}
+                    {isSaving ? "Procesando..." : "Guardar y cargar picadas válidas"}
                   </button>
                 ) : null}
 
@@ -445,6 +464,89 @@ export default function NormalizeAttendanceView({ uploadId }) {
                 </div>
               ))}
             </div>
+
+            <section
+              className={`${styles.reconciliationPanel} ${
+                reconciliationNeedsAttention ? styles.reconciliationWarning : styles.reconciliationOk
+              }`}
+            >
+              <div className={styles.reconciliationHeader}>
+                <div className={styles.reconciliationTitleBlock}>
+                  <div className={styles.reconciliationIcon}>
+                    {reconciliationNeedsAttention ? (
+                      <AlertCircle size={19} />
+                    ) : (
+                      <CheckCircle2 size={19} />
+                    )}
+                  </div>
+                  <div>
+                    <h2 className={styles.reconciliationTitle}>Conciliación por sucursal</h2>
+                    <p className={styles.reconciliationText}>
+                      Solo se publican picadas con empleado activo en esta sucursal.
+                    </p>
+                  </div>
+                </div>
+                <div className={styles.reconciliationStats}>
+                  <span>{response.summary?.matchedEmployees || 0} listos</span>
+                  <span>{response.summary?.unmatchedEmployees || 0} sin empleado</span>
+                  <span>{response.summary?.inactiveEmployees || 0} inactivos</span>
+                  <span>{response.summary?.duplicateMinutePunches || 0} duplicadas</span>
+                  <span>{response.summary?.irregularDays || 0} días irregulares</span>
+                </div>
+              </div>
+
+              <div className={styles.reconciliationTableWrap}>
+                <table className={styles.reconciliationTable}>
+                  <thead>
+                    <tr>
+                      <th>Código</th>
+                      <th>Empleado</th>
+                      <th>Estado</th>
+                      <th>Picadas</th>
+                      <th>Duplicadas</th>
+                      <th>Días irregulares</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reconciliationRows.map((employee) => (
+                      <tr key={`reconcile-${employee.biometricCode}`}>
+                        <td className={styles.reconciliationCode}>
+                          {employee.biometricCode || "s/n"}
+                        </td>
+                        <td>
+                          <strong>{employee.matchedEmployeeName || employee.fullName}</strong>
+                          <span>{employee.department || "Sin estructura"}</span>
+                        </td>
+                        <td>
+                          <span
+                            className={`${styles.matchBadge} ${getMatchClass(employee.matchStatus)}`}
+                          >
+                            {getMatchLabel(employee.matchStatus)}
+                          </span>
+                        </td>
+                        <td>{employee.punchCount || 0}</td>
+                        <td>{employee.duplicateMinuteCount || 0}</td>
+                        <td>
+                          {(employee.irregularDayCount || 0) > 0 ? (
+                            <div className={styles.irregularCell}>
+                              <strong>{employee.irregularDayCount}</strong>
+                              <span>
+                                {(employee.irregularDays || [])
+                                  .slice(0, 3)
+                                  .map((day) => `${day.date} (${day.punchCount})`)
+                                  .join(", ")}
+                              </span>
+                            </div>
+                          ) : (
+                            "0"
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
 
             <label className={styles.searchField}>
               <span className={styles.searchLabel}>Filtrar empleado encontrado</span>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, Download, Lock, RefreshCw, Save } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Download, RefreshCw, Save } from "lucide-react";
 
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { formatEcuadorMonthKey } from "@/lib/datetime/ecuador";
@@ -23,20 +23,26 @@ function readInitialState() {
   return {
     month: params.get("month") || currentMonthKey(),
     mode: params.get("mode") === "live" ? "live" : "saved",
+    closureId: params.get("closureId") || "",
   };
 }
 
-function syncState(month, mode = "saved") {
+function syncState(month, mode = "saved", closureId = "") {
   if (typeof window === "undefined") return;
 
   const params = new URLSearchParams();
   params.set("month", month);
   if (mode === "live") params.set("mode", "live");
+  if (mode !== "live" && closureId) params.set("closureId", closureId);
   window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
 }
 
 function metricValue(value) {
-  return value && value !== "0m" ? value : "--";
+  return value && value !== "0m" ? value : "0h00m";
+}
+
+function laborableValue(row) {
+  return `${metricValue(row.regularWorkedLabel)} / ${metricValue(row.regularTargetLabel)}`;
 }
 
 export default function MonthlyClosureView() {
@@ -47,18 +53,23 @@ export default function MonthlyClosureView() {
   const [payload, setPayload] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
+  const [exportMode, setExportMode] = useState("");
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [selectedClosureId, setSelectedClosureId] = useState(() => initialState.closureId || "");
   const [error, setError] = useState("");
 
   const isLiveMode = mode === "live";
   const data = isLiveMode ? payload?.preview : (payload?.closure || payload?.preview) || null;
   const isClosed = Boolean(payload?.isClosed);
-  const rows = data?.rows || [];
-  const closureVersion = payload?.closure?.version || 0;
+  const rows = (data?.rows || []).slice().sort((left, right) =>
+    String(left.employeeName || "").localeCompare(String(right.employeeName || ""), "es"),
+  );
+  const closures = payload?.closures || [];
+  const selectedClosureValue = selectedClosureId || payload?.closure?.id || "";
   const isUpdatingClosure = isSaving || (isLoading && Boolean(payload));
+  const totals = data?.totals || {};
 
-  async function loadClosure(nextMonth = month, nextMode = mode) {
+  async function loadClosure(nextMonth = month, nextMode = mode, nextClosureId = selectedClosureId) {
     try {
       setIsLoading(true);
       setError("");
@@ -66,6 +77,7 @@ export default function MonthlyClosureView() {
       const params = new URLSearchParams();
       params.set("month", nextMonth);
       if (nextMode === "live") params.set("mode", "live");
+      if (nextMode !== "live" && nextClosureId) params.set("closureId", nextClosureId);
 
       const response = await fetch(`/api/attendance/monthly-closure?${params.toString()}`);
       const nextPayload = await response.json();
@@ -85,14 +97,22 @@ export default function MonthlyClosureView() {
   function handleMonthChange(value) {
     setMonth(value);
     setMode("saved");
+    setSelectedClosureId("");
     syncState(value);
-    loadClosure(value, "saved");
+    loadClosure(value, "saved", "");
   }
 
   function handleModeChange(nextMode) {
     setMode(nextMode);
-    syncState(month, nextMode);
-    loadClosure(month, nextMode);
+    syncState(month, nextMode, selectedClosureId);
+    loadClosure(month, nextMode, selectedClosureId);
+  }
+
+  function handleClosureVersionChange(value) {
+    setSelectedClosureId(value);
+    setMode("saved");
+    syncState(month, "saved", value);
+    loadClosure(month, "saved", value);
   }
 
   async function saveClosure() {
@@ -108,7 +128,7 @@ export default function MonthlyClosureView() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ month }),
+        body: JSON.stringify({ month, completeBaseHours: true }),
       });
       const nextPayload = await response.json();
 
@@ -117,6 +137,7 @@ export default function MonthlyClosureView() {
       }
 
       setMode("saved");
+      setSelectedClosureId("");
       syncState(month, "saved");
       await loadClosure(month, "saved");
     } catch (requestError) {
@@ -131,17 +152,19 @@ export default function MonthlyClosureView() {
     setIsConfirmOpen(true);
   }
 
-  async function exportPayrollCsv() {
-    if (isExporting || isLoading || !rows.length) return;
+  async function exportClosure(nextExportMode) {
+    if (exportMode || isLoading || !rows.length) return;
+    const isDetailedExcel = nextExportMode === "detailed-xlsx";
 
     try {
-      setIsExporting(true);
+      setExportMode(nextExportMode);
       setError("");
 
       const params = new URLSearchParams();
       params.set("month", month);
-      params.set("export", "payroll-csv");
+      params.set("export", nextExportMode);
       if (isLiveMode) params.set("mode", "live");
+      if (!isLiveMode && selectedClosureValue) params.set("closureId", selectedClosureValue);
 
       const response = await fetch(`/api/attendance/monthly-closure?${params.toString()}`);
 
@@ -154,7 +177,9 @@ export default function MonthlyClosureView() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `cierre-mensual-${month}.csv`;
+      link.download = isDetailedExcel
+        ? `cierre-mensual-detallado-${month}.xlsx`
+        : `cierre-mensual-${month}.csv`;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -162,49 +187,59 @@ export default function MonthlyClosureView() {
     } catch (requestError) {
       setError(requestError.message);
     } finally {
-      setIsExporting(false);
+      setExportMode("");
     }
   }
 
   useEffect(() => {
-    loadClosure(initialStateRef.current.month, initialStateRef.current.mode);
+    loadClosure(
+      initialStateRef.current.month,
+      initialStateRef.current.mode,
+      initialStateRef.current.closureId,
+    );
   }, []);
 
   return (
     <section className={styles.panel}>
       <div className={styles.toolbar}>
-        <label>
-          <span>Mes</span>
-          <input type="month" value={month} onChange={(event) => handleMonthChange(event.target.value)} />
-        </label>
+        <div className={styles.filterGroup}>
+          <label>
+            <span>Mes</span>
+            <input type="month" value={month} onChange={(event) => handleMonthChange(event.target.value)} />
+          </label>
+          {closures.length ? (
+            <label>
+              <span>Copia</span>
+              <select value={selectedClosureValue} onChange={(event) => handleClosureVersionChange(event.target.value)} disabled={isSaving || isLoading}>
+                {closures.map((closure) => (
+                  <option key={closure.id} value={closure.id}>
+                    v{closure.version}{closure.isLatest ? " · última" : ""} · {new Date(closure.closedAt).toLocaleString("es-EC")}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+        </div>
 
         <div className={styles.actions}>
-          {isClosed ? (
-            <>
-              <div className={styles.closedBadge}>
-                <Lock size={16} />
-                Copia v{closureVersion}
-              </div>
-              <button
-                type="button"
-                className={styles.secondaryButton}
-                onClick={() => handleModeChange(isLiveMode ? "saved" : "live")}
-                disabled={isSaving || isLoading}
-              >
-                <RefreshCw size={16} />
-                {isLiveMode ? "Ver copia" : "Ver cálculo actual"}
-              </button>
-            </>
-          ) : null}
+          <button
+            type="button"
+            className={styles.exportButton}
+            onClick={() => exportClosure("detailed-xlsx")}
+            disabled={Boolean(exportMode) || isSaving || isLoading || !rows.length}
+          >
+            {exportMode === "detailed-xlsx" ? <RefreshCw size={16} /> : <Download size={16} />}
+            Excel completo
+          </button>
 
           <button
             type="button"
             className={styles.exportButton}
-            onClick={exportPayrollCsv}
-            disabled={isExporting || isSaving || isLoading || !rows.length}
+            onClick={() => exportClosure("payroll-csv")}
+            disabled={Boolean(exportMode) || isSaving || isLoading || !rows.length}
           >
-            {isExporting ? <RefreshCw size={16} /> : <Download size={16} />}
-            Exportar nómina
+            {exportMode === "payroll-csv" ? <RefreshCw size={16} /> : <Download size={16} />}
+            Formato nómina
           </button>
 
           <button
@@ -218,6 +253,59 @@ export default function MonthlyClosureView() {
           </button>
         </div>
       </div>
+
+      {isClosed ? (
+        <div className={`${styles.viewModeBar} ${isLiveMode ? styles.viewModeBarLive : ""}`}>
+          <div>
+            <span>Vista</span>
+            <strong>{isLiveMode ? "Cálculo actual" : "Copia guardada"}</strong>
+            <small>
+              {isLiveMode
+                ? "Muestra el cálculo con los datos actuales antes de guardar una nueva copia."
+                : "Muestra la copia cerrada seleccionada para nómina y exportación."}
+            </small>
+          </div>
+          <button
+            type="button"
+            className={styles.viewModeButton}
+            onClick={() => handleModeChange(isLiveMode ? "saved" : "live")}
+            disabled={isSaving || isLoading}
+          >
+            <RefreshCw size={16} />
+            {isLiveMode ? "Volver a copia" : "Ver cálculo actual"}
+          </button>
+        </div>
+      ) : null}
+
+      {!isLoading && data ? (
+        <div className={styles.summaryGrid}>
+          <article>
+            <span>Laborables</span>
+            <strong>{metricValue(totals.regularWorkedLabel)} / {metricValue(totals.regularTargetLabel)}</strong>
+            <small>{totals.baseCompletionMinutes ? `Comp. ${metricValue(totals.baseCompletionLabel)}` : "Base del cierre"}</small>
+          </article>
+          <article>
+            <span>Suplementarias</span>
+            <strong>{metricValue(totals.supplementaryLabel)}</strong>
+            <small>{totals.supplementaryAmountLabel || "Valor adicional"}</small>
+          </article>
+          <article>
+            <span>Extraordinarias</span>
+            <strong>{metricValue(totals.extraordinaryLabel)}</strong>
+            <small>{totals.extraordinaryAmountLabel || "Valor adicional"}</small>
+          </article>
+          <article>
+            <span>Atrasos</span>
+            <strong>{metricValue(totals.lateLabel)}</strong>
+            <small>Control interno</small>
+          </article>
+          <article>
+            <span>Sueldos</span>
+            <strong>{totals.salaryTotalLabel || "$0.00"}</strong>
+            <small>{totals.employees || 0} empleados</small>
+          </article>
+        </div>
+      ) : null}
 
       {error ? (
         <div className={styles.errorBox}>
@@ -247,36 +335,43 @@ export default function MonthlyClosureView() {
                 <thead>
                   <tr>
                     <th>Empleado</th>
-                    <th>Normales</th>
+                    <th>Laborables</th>
                     <th>Suplementarias</th>
                     <th>Extraordinarias</th>
                     <th>Atrasos</th>
+                    <th>Sueldo total</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((row, index) => (
                     <tr key={row.employeeId || `${row.employeeName}-${index}`}>
                       <td>
-                        <strong>{row.employeeName}</strong>
+                        <strong className={styles.employeeName}>{row.employeeName}</strong>
                         <span>{row.branchName} · {row.areaName} · {row.roleName}</span>
                       </td>
                       <td>
-                        <strong>{metricValue(row.regularWorkedLabel)}</strong>
+                        <span className={styles.metricValue}>{laborableValue(row)}</span>
+                        {row.baseCompletionMinutes > 0 ? (
+                          <span>Comp. {metricValue(row.baseCompletionLabel)}</span>
+                        ) : null}
                       </td>
                       <td>
-                        <strong>{metricValue(row.supplementaryLabel)}</strong>
+                        <span className={styles.metricValue}>{metricValue(row.supplementaryLabel)}</span>
                       </td>
                       <td>
-                        <strong>{metricValue(row.extraordinaryLabel)}</strong>
+                        <span className={styles.metricValue}>{metricValue(row.extraordinaryLabel)}</span>
                       </td>
                       <td>
-                        <strong>{metricValue(row.lateLabel)}</strong>
+                        <span className={styles.metricValue}>{metricValue(row.lateLabel)}</span>
+                      </td>
+                      <td>
+                        <strong className={styles.salaryValue}>{row.salaryTotalLabel || "$0.00"}</strong>
                       </td>
                     </tr>
                   ))}
                   {!rows.length ? (
                     <tr>
-                      <td colSpan={5} className={styles.emptyCell}>No hay empleados para cerrar en este mes.</td>
+                      <td colSpan={6} className={styles.emptyCell}>No hay empleados para cerrar en este mes.</td>
                     </tr>
                   ) : null}
                 </tbody>
@@ -290,8 +385,8 @@ export default function MonthlyClosureView() {
         title={isClosed ? "Actualizar cierre" : "Guardar cierre"}
         message={
           isClosed
-            ? "Se guardará una nueva versión del cierre de este mes. Nómina usará la última copia guardada."
-            : "Se guardará una copia fija del mes para usarla como base de nómina."
+            ? "Se guardará una nueva versión completando las horas laborables del mes con suplementarias aprobadas y luego extraordinarias. Nómina usará la última copia guardada."
+            : "Se guardará una copia fija completando las horas laborables del mes con suplementarias aprobadas y luego extraordinarias."
         }
         confirmLabel={isClosed ? "Actualizar cierre" : "Guardar cierre"}
         cancelLabel="Cancelar"

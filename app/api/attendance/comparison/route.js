@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { isAuthenticated } from "@/lib/auth";
 import { attendancePayrollPolicy } from "@/lib/attendance/exemptions";
+import { dedupePunchesByMinute } from "@/lib/attendance/punchIdentity";
 import {
   formatEcuadorDate,
   formatEcuadorDateKey,
@@ -24,9 +25,27 @@ import VacationRequest from "@/models/VacationRequest";
 
 const REGULAR_DAY_MINUTES = 8 * 60;
 const MIN_TWO_PUNCH_SPAN_MINUTES = 60;
+const MIN_EXTRAORDINARY_TWO_PUNCH_SPAN_MINUTES = 30;
 const MIN_REAL_LUNCH_MINUTES = 5;
 const MAX_REAL_LUNCH_MINUTES = 180;
+const SUPPLEMENTARY_SURCHARGE_MULTIPLIER = 0.5;
+const EXTRAORDINARY_SURCHARGE_MULTIPLIER = 1;
 const VARIABLE_SCHEDULE_AREA_CODES = new Set(["ALM", "BOD"]);
+const ATTENDANCE_INFERRED_SCHEDULE_AREA_CODES = new Set(["ALM"]);
+const ATTENDANCE_INFERRED_SCHEDULE_ROLE_CODES = new Set([
+  "CAJALM",
+  "VENDALM",
+  "VENFER",
+  "VENHOG",
+  "VENACA",
+]);
+const ATTENDANCE_ISSUE_TAGS = new Set([
+  "Sin picadas",
+  "Picadas incompletas",
+  "Picadas insuficientes",
+  "Atraso",
+  "Salida anticipada",
+]);
 const WEEKDAY_LABEL_FORMATTER = new Intl.DateTimeFormat("es-EC", {
   weekday: "short",
   timeZone: "America/Guayaquil",
@@ -57,9 +76,7 @@ function moneyLabel(value) {
   }).format(Number(value) || 0);
 }
 
-function buildDailyPay(day, hourlyRate, multipliers = {}) {
-  const supplementaryMultiplier = Number(multipliers.supplementaryMultiplier) || 1.5;
-  const extraordinaryMultiplier = Number(multipliers.extraordinaryMultiplier) || 2;
+function buildDailyPay(day, hourlyRate) {
   const items = [];
 
   function addItem(label, minutes, multiplier = 1, sign = 1) {
@@ -79,17 +96,8 @@ function buildDailyPay(day, hourlyRate, multipliers = {}) {
     });
   }
 
-  const isWorkedHoliday =
-    day.dayType === "holiday" &&
-    ((Number(day.punchCount) || 0) > 0 || (Number(day.extraordinaryMinutes) || 0) > 0);
-
-  if (!isWorkedHoliday) {
-    addItem("Laboral", day.regularWorkedMinutes, 1);
-  }
-
-  addItem("Suplementaria", day.supplementaryMinutes, supplementaryMultiplier);
-  addItem("Extraordinaria", day.extraordinaryMinutes, extraordinaryMultiplier);
-  addItem("Atraso", day.lateMinutes, 1, -1);
+  addItem("Suplementaria", day.supplementaryMinutes, SUPPLEMENTARY_SURCHARGE_MULTIPLIER);
+  addItem("Extraordinaria", day.extraordinaryMinutes, EXTRAORDINARY_SURCHARGE_MULTIPLIER);
 
   const total = items.reduce((sum, item) => sum + item.rawAmount, 0);
 
@@ -135,6 +143,21 @@ function isPlannedWorkDay(day) {
 
 function isPlannedPaidDay(day) {
   return ["workday", "weekend_overtime", "holiday", "vacation"].includes(day?.dayType);
+}
+
+function isExtraordinaryAttendanceDay(day) {
+  return ["holiday", "weekend_overtime", "off_day"].includes(day?.dayType);
+}
+
+function minimumTwoPunchSpanMinutes(day, employee = {}) {
+  const areaCode = String(employee?.areaCode || "").trim().toUpperCase();
+  const roleCode = String(employee?.roleCode || "").trim().toUpperCase();
+
+  if (areaCode === "BOD" && roleCode === "TECBOD" && isExtraordinaryAttendanceDay(day)) {
+    return MIN_EXTRAORDINARY_TWO_PUNCH_SPAN_MINUTES;
+  }
+
+  return MIN_TWO_PUNCH_SPAN_MINUTES;
 }
 
 function isWeekendDateKey(dateKey) {
@@ -230,6 +253,36 @@ function resolveScheduledMinutes(day) {
   };
 }
 
+function resolveScheduledNetMinutes(day) {
+  const scheduleStart = combineDateAndTime(day?.dateKey, day?.startTime);
+  const scheduleEnd = combineDateAndTime(day?.dateKey, day?.endTime);
+
+  if (!scheduleStart || !scheduleEnd || scheduleEnd <= scheduleStart) {
+    return 0;
+  }
+
+  return Math.max(
+    0,
+    Math.round((scheduleEnd - scheduleStart) / 60000) - (Number(day?.lunchDurationMinutes) || 0),
+  );
+}
+
+function resolvePlannedExtraordinaryMinutes(day) {
+  if (day?.payrollPolicy?.appliesExtraordinaryHours === false) {
+    return 0;
+  }
+
+  if (day?.dayType === "weekend_overtime") {
+    return Number(day.scheduledWorkedMinutes) || resolveScheduledNetMinutes(day);
+  }
+
+  if (day?.dayType === "holiday") {
+    return resolveScheduledNetMinutes(day);
+  }
+
+  return 0;
+}
+
 function resolveActualLunchMinutes(sortedPunches) {
   if (sortedPunches.length < 4) return null;
 
@@ -243,6 +296,305 @@ function resolveActualLunchMinutes(sortedPunches) {
   if (lunchMinutes < MIN_REAL_LUNCH_MINUTES || lunchMinutes > MAX_REAL_LUNCH_MINUTES) return null;
 
   return lunchMinutes;
+}
+
+function shouldInferWeeklyAttendanceSchedule(employee = {}) {
+  const areaCode = normalizeCode(employee.areaCode);
+  const roleCode = normalizeCode(employee.roleCode);
+
+  return (
+    ATTENDANCE_INFERRED_SCHEDULE_AREA_CODES.has(areaCode) &&
+    ATTENDANCE_INFERRED_SCHEDULE_ROLE_CODES.has(roleCode)
+  );
+}
+
+function estimateWorkedMinutesFromPunches(punches = [], fallbackLunchMinutes = 60) {
+  const sortedPunches = dedupePunchesByMinute(punches)
+    .filter((punch) => punch?.punchedAt)
+    .sort((left, right) => left.punchedAt - right.punchedAt);
+
+  if (sortedPunches.length < 2 || sortedPunches.length % 2 !== 0) {
+    return 0;
+  }
+
+  const firstPunch = sortedPunches[0];
+  const lastPunch = sortedPunches[sortedPunches.length - 1];
+  const grossMinutes = Math.max(0, Math.round((lastPunch.punchedAt - firstPunch.punchedAt) / 60000));
+
+  if (grossMinutes < MIN_TWO_PUNCH_SPAN_MINUTES) {
+    return 0;
+  }
+
+  let lunchMinutes = 0;
+
+  if (sortedPunches.length >= 4) {
+    lunchMinutes = resolveActualLunchMinutes(sortedPunches) ?? Math.max(0, Number(fallbackLunchMinutes) || 0);
+  }
+
+  return Math.max(0, grossMinutes - lunchMinutes);
+}
+
+function getReferenceWorkdayTemplate(weekDays = [], fallbackLunchMinutes = 60) {
+  const workday = weekDays.find((day) => day.dayType === "workday" && day.startTime && day.endTime);
+
+  if (workday) {
+    return {
+      startTime: workday.startTime,
+      endTime: workday.endTime,
+      lunchDurationMinutes: Number(workday.lunchDurationMinutes) || fallbackLunchMinutes,
+      authorizedExtraMinutes: Number(workday.authorizedExtraMinutes) || 0,
+      graceMinutes: workday.graceMinutes ?? null,
+    };
+  }
+
+  return {
+    startTime: "08:00",
+    endTime: "18:00",
+    lunchDurationMinutes: fallbackLunchMinutes,
+    authorizedExtraMinutes: 60,
+    graceMinutes: null,
+  };
+}
+
+function getInferredWorkdayTemplate(day, baseTemplate, employee = {}) {
+  const branchCode = normalizeCode(employee.branchCode);
+  const areaCode = normalizeCode(employee.areaCode);
+
+  if (branchCode === "SAL" && areaCode === "ALM" && isWeekendDateKey(day.dateKey)) {
+    return {
+      startTime: "08:30",
+      endTime: "14:30",
+      lunchDurationMinutes: 0,
+      authorizedExtraMinutes: 0,
+      graceMinutes: baseTemplate.graceMinutes ?? null,
+    };
+  }
+
+  return baseTemplate;
+}
+
+function inferWeeklyAttendanceSchedule(days = [], punchesByDate = new Map(), employee = {}, laborRules = {}) {
+  if (!shouldInferWeeklyAttendanceSchedule(employee)) {
+    return days;
+  }
+
+  const weeks = new Map();
+  const fallbackLunchMinutes = resolveConfiguredLunchMinutes(laborRules, employee);
+
+  days.forEach((day) => {
+    const key = weekStartKey(day.dateKey);
+
+    if (!weeks.has(key)) {
+      weeks.set(key, []);
+    }
+
+    weeks.get(key).push(day);
+  });
+
+  const inferredDaysByDate = new Map();
+
+  [...weeks.entries()].forEach(([, weekDays]) => {
+    const sortedWeekDays = [...weekDays].sort((left, right) => left.dateKey.localeCompare(right.dateKey));
+    const manualWorkDateKeys = new Set(
+      sortedWeekDays
+        .filter((day) => day.source === "manual_override" && day.dayType === "workday")
+        .map((day) => day.dateKey),
+    );
+    const manualRestDateKeys = new Set(
+      sortedWeekDays
+        .filter((day) => day.source === "manual_override" && day.dayType === "off_day")
+        .map((day) => day.dateKey),
+    );
+    const weekdayHolidayCount = sortedWeekDays.filter((day) => (
+      !isWeekendDateKey(day.dateKey) && day.dayType === "holiday"
+    )).length;
+    const availableLaborDays = sortedWeekDays.filter((day) => (
+      !["holiday", "vacation"].includes(day.dayType) && !manualRestDateKeys.has(day.dateKey)
+    )).length;
+    const laborTargetDays = Math.min(availableLaborDays, Math.max(0, 5 - weekdayHolidayCount));
+
+    if (laborTargetDays <= 0) {
+      sortedWeekDays.forEach((day) => inferredDaysByDate.set(day.dateKey, day));
+      return;
+    }
+
+    const workdayTemplate = getReferenceWorkdayTemplate(sortedWeekDays, fallbackLunchMinutes);
+    const candidates = sortedWeekDays
+      .filter((day) => !["holiday", "vacation"].includes(day.dayType))
+      .map((day) => {
+        const punches = punchesByDate.get(day.dateKey) || [];
+        const punchCount = dedupePunchesByMinute(punches).length;
+        const estimatedWorkedMinutes = estimateWorkedMinutesFromPunches(
+          punches,
+          workdayTemplate.lunchDurationMinutes,
+        );
+
+        return {
+          day,
+          punchCount,
+          estimatedWorkedMinutes,
+          isWeekend: isWeekendDateKey(day.dateKey),
+        };
+      })
+      .filter((candidate) => candidate.punchCount > 0);
+    const selectedWorkDateKeys = new Set(
+      candidates
+        .filter((candidate) => (
+          !manualWorkDateKeys.has(candidate.day.dateKey) &&
+          !manualRestDateKeys.has(candidate.day.dateKey)
+        ))
+        .sort((left, right) => {
+          const workedDelta = right.estimatedWorkedMinutes - left.estimatedWorkedMinutes;
+          if (workedDelta) return workedDelta;
+
+          const punchDelta = right.punchCount - left.punchCount;
+          if (punchDelta) return punchDelta;
+
+          if (left.isWeekend !== right.isWeekend) {
+            return left.isWeekend ? 1 : -1;
+          }
+
+          return left.day.dateKey.localeCompare(right.day.dateKey);
+        })
+        .slice(0, Math.max(0, laborTargetDays - manualWorkDateKeys.size))
+        .map((candidate) => candidate.day.dateKey),
+    );
+    manualWorkDateKeys.forEach((dateKey) => selectedWorkDateKeys.add(dateKey));
+
+    sortedWeekDays.forEach((day) => {
+      if (["holiday", "vacation"].includes(day.dayType)) {
+        inferredDaysByDate.set(day.dateKey, day);
+        return;
+      }
+
+      if (day.source === "manual_override" && day.dayType !== "workday") {
+        inferredDaysByDate.set(day.dateKey, day);
+        return;
+      }
+
+      if (selectedWorkDateKeys.has(day.dateKey)) {
+        if (day.source === "manual_override" && day.dayType === "workday") {
+          inferredDaysByDate.set(day.dateKey, day);
+          return;
+        }
+
+        const inferredTemplate = getInferredWorkdayTemplate(day, workdayTemplate, employee);
+
+        inferredDaysByDate.set(day.dateKey, {
+          ...day,
+          dayType: "workday",
+          startTime: inferredTemplate.startTime,
+          endTime: inferredTemplate.endTime,
+          lunchDurationMinutes: inferredTemplate.lunchDurationMinutes,
+          authorizedExtraMinutes: inferredTemplate.authorizedExtraMinutes,
+          graceMinutes: day.graceMinutes ?? inferredTemplate.graceMinutes,
+          source: day.source === "calendar" || day.dayType !== "workday"
+            ? "attendance_inferred"
+            : day.source,
+        });
+        return;
+      }
+
+      const hasPunches = (punchesByDate.get(day.dateKey) || []).length > 0;
+
+      inferredDaysByDate.set(day.dateKey, {
+        ...day,
+        dayType: "off_day",
+        startTime: "",
+        endTime: "",
+        lunchDurationMinutes: 0,
+        authorizedExtraMinutes: 0,
+        source: hasPunches ? "attendance_extra" : "attendance_rest",
+      });
+    });
+  });
+
+  return days.map((day) => inferredDaysByDate.get(day.dateKey) || day);
+}
+
+function normalizeCode(value) {
+  return String(value || "").trim().toUpperCase();
+}
+
+function resolveConfiguredLunchMinutes(laborRules, employee = {}) {
+  const areaCode = normalizeCode(employee.areaCode);
+  const roleCode = normalizeCode(employee.roleCode);
+  const employeeId = toId(employee);
+  const employeeName = normalizeCode(employee.fullName);
+  const employeeRule = (laborRules?.employeeLunchRules || []).find((rule) => {
+    const ruleEmployeeId = String(rule.employeeId || "").trim();
+    const ruleEmployeeName = normalizeCode(rule.employeeName);
+
+    return (
+      (ruleEmployeeId && ruleEmployeeId === employeeId) ||
+      (!ruleEmployeeId && ruleEmployeeName && ruleEmployeeName === employeeName)
+    );
+  });
+
+  if (employeeRule) {
+    return Math.max(0, Number(employeeRule.lunchDurationMinutes) || 0);
+  }
+
+  const roleRule = (laborRules?.roleLunchRules || []).find((rule) =>
+    normalizeCode(rule.areaCode) === areaCode && normalizeCode(rule.roleCode) === roleCode,
+  );
+
+  if (roleRule) {
+    return Math.max(0, Number(roleRule.lunchDurationMinutes) || 0);
+  }
+
+  const areaRule = (laborRules?.areaLunchRules || []).find((rule) =>
+    normalizeCode(rule.areaCode) === areaCode,
+  );
+
+  if (areaRule) {
+    return Math.max(0, Number(areaRule.lunchDurationMinutes) || 0);
+  }
+
+  return 60;
+}
+
+function applyLunchPolicyByDay(day, employee = {}, laborRules = {}) {
+  const dayOfWeek = new Date(`${day?.dateKey}T12:00:00.000Z`).getUTCDay();
+  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+  const configuredLunchMinutes = resolveConfiguredLunchMinutes(laborRules, employee);
+
+  if (!day?.startTime || !day?.endTime) {
+    return day;
+  }
+
+  if (!isWeekend) {
+    return {
+      ...day,
+      lunchDurationMinutes: configuredLunchMinutes,
+    };
+  }
+
+  const scheduleStart = combineDateAndTime(day.dateKey, day.startTime);
+  const scheduleEnd = combineDateAndTime(day.dateKey, day.endTime);
+
+  if (!scheduleStart || !scheduleEnd || scheduleEnd <= scheduleStart) {
+    return day;
+  }
+
+  const grossMinutes = Math.max(0, Math.round((scheduleEnd - scheduleStart) / 60000));
+  const isFullWeekendShift = grossMinutes >= REGULAR_DAY_MINUTES;
+
+  return {
+    ...day,
+    lunchDurationMinutes: isFullWeekendShift ? 60 : 0,
+  };
+}
+
+function resolveHolidayLunchDiscountMinutes(laborRules, employee = {}) {
+  const areaCode = normalizeCode(employee.areaCode);
+  const configuredLunchMinutes = resolveConfiguredLunchMinutes(laborRules, employee);
+
+  if (areaCode === "ALM") {
+    return Math.max(configuredLunchMinutes, 90);
+  }
+
+  return configuredLunchMinutes;
 }
 
 function buildReferenceDaysInRange(contextStart, contextEnd, holidayDateKeys = new Set()) {
@@ -385,14 +737,44 @@ function applyVacationDay(day, vacationDateKeys = new Set()) {
   };
 }
 
+function resolveEmploymentStartDateKey(employee = {}) {
+  const value = employee.employmentStartDate || employee.startDate || employee.hireDate || null;
+  if (!value) return "";
+
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  return formatEcuadorDateKey(date);
+}
+
+function applyEmploymentStartDay(day, employmentStartDateKey = "") {
+  if (!employmentStartDateKey || day.dateKey >= employmentStartDateKey) return day;
+
+  return {
+    ...day,
+    dayType: "off_day",
+    startTime: "",
+    endTime: "",
+    lunchDurationMinutes: 0,
+    authorizedExtraMinutes: 0,
+    source: "employment_pending",
+  };
+}
+
 function countBaseLaborDays(referenceDays) {
-  return referenceDays.filter((day) => !isWeekendDateKey(day.dateKey)).length;
+  return referenceDays.filter((day) => (
+    !isWeekendDateKey(day.dateKey) && day.dayType !== "holiday"
+  )).length;
 }
 
 function cleanPayrollTags(tags) {
   return tags.filter((tag) =>
     !["Suplementaria", "Suplementarias adicionales", "Extraordinaria", "Todo autorizado"].includes(tag),
   );
+}
+
+function isAttendanceIssueTag(tag) {
+  return ATTENDANCE_ISSUE_TAGS.has(tag);
 }
 
 function hasAssignedScheduleDay(day) {
@@ -414,29 +796,57 @@ function buildDayDecisionMap(decisions = []) {
 }
 
 function applyDayDecision(day, decision) {
+  const paidPlannedDayDecisions = new Set([
+    "pay_planned_day",
+    "justify_no_punches",
+    "justify_incomplete_punches",
+  ]);
+  const completeRegularDayDecisions = new Set([
+    "complete_regular_day",
+  ]);
   const policy = day.payrollPolicy || {};
-  const detectedSupplementaryMinutes = policy.appliesSupplementaryHours === false
+  const isExtraordinaryDay = isExtraordinaryAttendanceDay(day);
+  const detectedSupplementaryMinutes = policy.appliesSupplementaryHours === false || isExtraordinaryDay
     ? 0
     : Math.max(Number(day.supplementaryMinutes) || 0, Number(decision?.detectedSupplementaryMinutes) || 0);
-  const detectedExtraordinaryMinutes = policy.appliesExtraordinaryHours === false
+  const detectedExtraordinaryMinutes = policy.appliesExtraordinaryHours === false || !isExtraordinaryDay
     ? 0
     : Math.max(Number(day.extraordinaryMinutes) || 0, Number(decision?.detectedExtraordinaryMinutes) || 0);
-  const detectedLateMinutes = Math.max(Number(day.lateMinutes) || 0, Number(decision?.detectedLateMinutes) || 0);
+  const detectedLateIssueMinutes = isExtraordinaryDay || policy.scheduleAffectsSalary === false
+    ? 0
+    : Math.max(
+      0,
+      (Number(day.lateMinutes) || 0) + (Number(day.lunchOverageRemainderMinutes) || 0),
+    );
+  const detectedLateMinutes = detectedLateIssueMinutes;
+  const detectedEarlyLeaveMinutes = Math.max(Number(day.earlyLeaveMinutes) || 0, Number(decision?.detectedEarlyLeaveMinutes) || 0);
   const adjustedLateMinutes = decision
     ? Math.min(
       detectedLateMinutes,
-      decision.adjustedLateMinutes === undefined || decision.adjustedLateMinutes === null
-        ? Number(day.lateMinutes) || 0
+      ["discount_day", "pay_planned_day", "complete_regular_day", "justify_no_punches", "justify_incomplete_punches", "justify_late"].includes(decision.decision)
+        ? 0
+        : decision.adjustedLateMinutes === undefined || decision.adjustedLateMinutes === null
+        ? detectedLateMinutes
         : Math.max(0, Number(decision.adjustedLateMinutes) || 0),
     )
-    : Number(day.lateMinutes) || 0;
+    : detectedLateMinutes;
+  const adjustedEarlyLeaveMinutes = decision
+    ? Math.min(
+      detectedEarlyLeaveMinutes,
+      ["discount_day", "pay_planned_day", "complete_regular_day", "justify_early_leave", "justify_no_punches", "justify_incomplete_punches"].includes(decision.decision)
+        ? 0
+        : decision.adjustedEarlyLeaveMinutes === undefined || decision.adjustedEarlyLeaveMinutes === null
+        ? Number(day.earlyLeaveMinutes) || 0
+        : Math.max(0, Number(decision.adjustedEarlyLeaveMinutes) || 0),
+    )
+    : Number(day.earlyLeaveMinutes) || 0;
   const hasAuthorizableTime = detectedSupplementaryMinutes > 0 || detectedExtraordinaryMinutes > 0;
   const plannedSupplementaryMinutes = Math.min(
-    detectedSupplementaryMinutes,
+    isExtraordinaryDay ? 0 : detectedSupplementaryMinutes,
     Math.max(0, (Number(day.plannedSupplementaryMinutes) || 0) - (Number(day.lunchOverageRemainderMinutes) || 0)),
   );
   const plannedExtraordinaryMinutes = Math.min(
-    detectedExtraordinaryMinutes,
+    isExtraordinaryDay ? detectedExtraordinaryMinutes : 0,
     Math.max(0, day.dayType === "holiday" && (Number(day.punchCount) || 0) > 0
       ? REGULAR_DAY_MINUTES
       : day.dayType === "weekend_overtime"
@@ -453,7 +863,9 @@ function applyDayDecision(day, decision) {
   const plannedPaidRegularMinutes = Math.max(0, Number(day.plannedRegularMinutes) || 0);
   const plannedPaidSupplementaryMinutes = policy.appliesSupplementaryHours === false
     ? 0
-    : Math.max(0, (Number(day.plannedSupplementaryMinutes) || 0) - (Number(day.lunchOverageRemainderMinutes) || 0));
+    : isExtraordinaryDay
+      ? 0
+      : Math.max(0, (Number(day.plannedSupplementaryMinutes) || 0) - (Number(day.lunchOverageRemainderMinutes) || 0));
 
   if (effectiveDecision.decision === "reviewed") {
     return {
@@ -470,7 +882,9 @@ function applyDayDecision(day, decision) {
         authorizedSupplementaryMinutes: Number(day.supplementaryMinutes) || 0,
         authorizedExtraordinaryMinutes: Number(day.extraordinaryMinutes) || 0,
         detectedLateMinutes,
-        adjustedLateMinutes: Number(day.lateMinutes) || 0,
+        adjustedLateMinutes,
+        detectedEarlyLeaveMinutes,
+        adjustedEarlyLeaveMinutes: Number(day.earlyLeaveMinutes) || 0,
         note: effectiveDecision.note || "",
         decidedBy: effectiveDecision.decidedBy || "",
         isSaved: Boolean(decision),
@@ -478,7 +892,58 @@ function applyDayDecision(day, decision) {
     };
   }
 
-  if (effectiveDecision.decision === "pay_planned_day") {
+  if (completeRegularDayDecisions.has(effectiveDecision.decision)) {
+    const completedTags = cleanPayrollTags(day.tags || [])
+      .filter((tag) => ![
+        "Sin picadas",
+        "Picadas incompletas",
+        "Picadas insuficientes",
+        "Salida anticipada",
+        "Atraso",
+        "Dia descontado",
+      ].includes(tag));
+    const statusLabel = "Jornada laboral completada";
+
+    return {
+      ...day,
+      tags: [...completedTags, statusLabel],
+      hasIssue: false,
+      workedMinutes: plannedPaidRegularMinutes,
+      workedLabel: plannedPaidRegularMinutes ? minutesLabel(plannedPaidRegularMinutes) : "--",
+      regularWorkedMinutes: plannedPaidRegularMinutes,
+      regularWorkedLabel: plannedPaidRegularMinutes ? minutesLabel(plannedPaidRegularMinutes) : "--",
+      lateMinutes: 0,
+      earlyLeaveMinutes: 0,
+      supplementaryMinutes: 0,
+      supplementaryLabel: "--",
+      extraordinaryMinutes: 0,
+      extraordinaryLabel: "--",
+      detectedSupplementaryMinutes,
+      detectedSupplementaryLabel: detectedSupplementaryMinutes ? minutesLabel(detectedSupplementaryMinutes) : "--",
+      detectedExtraordinaryMinutes,
+      detectedExtraordinaryLabel: detectedExtraordinaryMinutes ? minutesLabel(detectedExtraordinaryMinutes) : "--",
+      authorization: {
+        decision: effectiveDecision.decision,
+        statusLabel,
+        authorizedSupplementaryMinutes: 0,
+        authorizedExtraordinaryMinutes: 0,
+        detectedLateMinutes,
+        adjustedLateMinutes: 0,
+        detectedEarlyLeaveMinutes,
+        adjustedEarlyLeaveMinutes: 0,
+        note: effectiveDecision.note || "",
+        decidedBy: effectiveDecision.decidedBy || "",
+        isSaved: Boolean(decision),
+      },
+    };
+  }
+
+  if (paidPlannedDayDecisions.has(effectiveDecision.decision)) {
+    const statusLabel = effectiveDecision.decision === "justify_no_punches"
+      ? "Falta justificada"
+      : effectiveDecision.decision === "justify_incomplete_punches"
+        ? "Picadas justificadas"
+        : "Dia planificado pagado";
     const paidTags = cleanPayrollTags(day.tags || [])
       .filter((tag) => ![
         "Sin picadas",
@@ -488,11 +953,14 @@ function applyDayDecision(day, decision) {
         "Atraso",
         "Dia descontado",
       ].includes(tag));
+    const plannedPaidWorkedMinutes = plannedPaidRegularMinutes + plannedPaidSupplementaryMinutes;
 
     return {
       ...day,
-      tags: [...paidTags, "Dia planificado pagado"],
+      tags: [...paidTags, statusLabel],
       hasIssue: false,
+      workedMinutes: plannedPaidWorkedMinutes,
+      workedLabel: plannedPaidWorkedMinutes ? minutesLabel(plannedPaidWorkedMinutes) : "--",
       regularWorkedMinutes: plannedPaidRegularMinutes,
       regularWorkedLabel: plannedPaidRegularMinutes ? minutesLabel(plannedPaidRegularMinutes) : "--",
       lateMinutes: 0,
@@ -508,12 +976,14 @@ function applyDayDecision(day, decision) {
       detectedExtraordinaryMinutes,
       detectedExtraordinaryLabel: detectedExtraordinaryMinutes ? minutesLabel(detectedExtraordinaryMinutes) : "--",
       authorization: {
-        decision: "pay_planned_day",
-        statusLabel: "Dia planificado pagado",
+        decision: effectiveDecision.decision,
+        statusLabel,
         authorizedSupplementaryMinutes: plannedPaidSupplementaryMinutes,
         authorizedExtraordinaryMinutes: 0,
         detectedLateMinutes,
         adjustedLateMinutes: 0,
+        detectedEarlyLeaveMinutes,
+        adjustedEarlyLeaveMinutes: 0,
         note: effectiveDecision.note || "",
         decidedBy: effectiveDecision.decidedBy || "",
         isSaved: Boolean(decision),
@@ -532,18 +1002,31 @@ function applyDayDecision(day, decision) {
     };
   }
 
-  const authorizedSupplementaryMinutes = effectiveDecision.decision === "planned"
+  const rawAuthorizedSupplementaryMinutes = effectiveDecision.decision === "planned"
     ? plannedSupplementaryMinutes
     : Math.min(
       detectedSupplementaryMinutes,
       Math.max(0, Number(effectiveDecision.authorizedSupplementaryMinutes) || 0),
     );
-  const authorizedExtraordinaryMinutes = effectiveDecision.decision === "planned"
+  const rawAuthorizedExtraordinaryMinutes = effectiveDecision.decision === "planned"
     ? plannedExtraordinaryMinutes
     : Math.min(
       detectedExtraordinaryMinutes,
       Math.max(0, Number(effectiveDecision.authorizedExtraordinaryMinutes) || 0),
     );
+  const issueDeductionMinutes = isExtraordinaryDay ? 0 : adjustedLateMinutes;
+  const authorizedSupplementaryMinutes = isExtraordinaryDay
+    ? 0
+    : effectiveDecision.decision === "planned"
+      ? Math.min(rawAuthorizedSupplementaryMinutes, Math.max(0, detectedSupplementaryMinutes - issueDeductionMinutes))
+      : effectiveDecision.decision === "justify_early_leave" && adjustedEarlyLeaveMinutes === 0
+        ? Math.max(0, plannedPaidSupplementaryMinutes - issueDeductionMinutes)
+      : Math.max(0, rawAuthorizedSupplementaryMinutes - issueDeductionMinutes);
+  const authorizedExtraordinaryMinutes = isExtraordinaryDay
+    ? effectiveDecision.decision === "planned"
+      ? Math.min(rawAuthorizedExtraordinaryMinutes, Math.max(0, detectedExtraordinaryMinutes - issueDeductionMinutes))
+      : Math.max(0, rawAuthorizedExtraordinaryMinutes - issueDeductionMinutes)
+    : 0;
   const adjustedTags = cleanPayrollTags(day.tags || []);
   const lateAdjustedTags = adjustedTags.filter((tag) => tag !== "Atraso");
   const hasUnauthorizedSupplementaryTime = authorizedSupplementaryMinutes < detectedSupplementaryMinutes;
@@ -571,6 +1054,8 @@ function applyDayDecision(day, decision) {
         authorizedExtraordinaryMinutes: 0,
         detectedLateMinutes,
         adjustedLateMinutes: 0,
+        detectedEarlyLeaveMinutes,
+        adjustedEarlyLeaveMinutes: 0,
         note: effectiveDecision.note || "",
         decidedBy: effectiveDecision.decidedBy || "",
         isSaved: Boolean(decision),
@@ -578,22 +1063,52 @@ function applyDayDecision(day, decision) {
     };
   }
 
-  const isReviewedPlannedDecision = Boolean(decision) && effectiveDecision.decision === "planned";
-
-  if (hasUnauthorizedSupplementaryTime && !isReviewedPlannedDecision) {
-    lateAdjustedTags.push("Suplementarias adicionales");
-  }
-  if (authorizedExtraordinaryMinutes > 0) lateAdjustedTags.push("Extraordinaria");
-  if (adjustedLateMinutes > 0) lateAdjustedTags.push("Atraso");
-  const hasIssue = lateAdjustedTags.some((tag) =>
-    !["Extraordinaria"].includes(tag),
-  );
+  const isSavedDecision = Boolean(decision);
+  const issueAdjustedTags = lateAdjustedTags.filter((tag) => ![
+    "Atraso",
+    "Atraso justificado",
+    "Salida anticipada",
+    "Salida justificada",
+    "Sin picadas",
+    "Picadas incompletas",
+    "Picadas insuficientes",
+  ].includes(tag));
+  if (!isSavedDecision && authorizedExtraordinaryMinutes > 0) issueAdjustedTags.push("Extraordinaria");
+  if (!isSavedDecision && adjustedLateMinutes > 0) issueAdjustedTags.push("Atraso");
+  if (!isSavedDecision && adjustedEarlyLeaveMinutes > 0) issueAdjustedTags.push("Salida anticipada");
+  const shouldCompleteLaborForJustifiedEarlyLeave =
+    detectedEarlyLeaveMinutes > 0 &&
+    adjustedEarlyLeaveMinutes === 0 &&
+    plannedPaidRegularMinutes > 0;
+  const shouldCompleteLaborForJustifiedLate =
+    effectiveDecision.decision === "justify_late" &&
+    detectedLateMinutes > 0 &&
+    adjustedLateMinutes === 0 &&
+    plannedPaidRegularMinutes > 0;
+  if (!isSavedDecision && shouldCompleteLaborForJustifiedEarlyLeave) issueAdjustedTags.push("Salida justificada");
+  if (!isSavedDecision && shouldCompleteLaborForJustifiedLate) issueAdjustedTags.push("Atraso justificado");
+  const hasIssue = isSavedDecision ? false : issueAdjustedTags.some(isAttendanceIssueTag);
+  const shouldCompleteLabor = shouldCompleteLaborForJustifiedEarlyLeave || shouldCompleteLaborForJustifiedLate;
+  const regularWorkedMinutes = shouldCompleteLabor
+    ? Math.max(Number(day.regularWorkedMinutes) || 0, plannedPaidRegularMinutes)
+    : Number(day.regularWorkedMinutes) || 0;
+  const workedMinutes = shouldCompleteLabor
+    ? Math.max(
+      Number(day.workedMinutes) || 0,
+      plannedPaidRegularMinutes + plannedPaidSupplementaryMinutes + authorizedExtraordinaryMinutes,
+    )
+    : Number(day.workedMinutes) || 0;
 
   return {
     ...day,
-    tags: lateAdjustedTags,
+    tags: issueAdjustedTags,
     hasIssue,
-    lateMinutes: adjustedLateMinutes,
+    workedMinutes,
+    workedLabel: workedMinutes ? minutesLabel(workedMinutes) : "--",
+    regularWorkedMinutes,
+    regularWorkedLabel: regularWorkedMinutes ? minutesLabel(regularWorkedMinutes) : "--",
+    lateMinutes: isExtraordinaryDay ? 0 : adjustedLateMinutes,
+    earlyLeaveMinutes: isExtraordinaryDay ? 0 : adjustedEarlyLeaveMinutes,
     supplementaryMinutes: authorizedSupplementaryMinutes,
     supplementaryLabel: authorizedSupplementaryMinutes ? minutesLabel(authorizedSupplementaryMinutes) : "--",
     extraordinaryMinutes: authorizedExtraordinaryMinutes,
@@ -606,6 +1121,10 @@ function applyDayDecision(day, decision) {
       decision: effectiveDecision.decision || "custom",
       statusLabel: effectiveDecision.decision === "none"
         ? "No pagado"
+        : effectiveDecision.decision === "justify_early_leave"
+          ? "Salida justificada"
+        : effectiveDecision.decision === "justify_late"
+          ? "Atraso justificado"
         : effectiveDecision.decision === "full"
           ? "Todo autorizado"
           : effectiveDecision.decision === "planned"
@@ -617,6 +1136,8 @@ function applyDayDecision(day, decision) {
       authorizedExtraordinaryMinutes,
       detectedLateMinutes,
       adjustedLateMinutes,
+      detectedEarlyLeaveMinutes,
+      adjustedEarlyLeaveMinutes,
       note: effectiveDecision.note || "",
       decidedBy: effectiveDecision.decidedBy || "",
       isSaved: Boolean(decision),
@@ -648,12 +1169,8 @@ function applyMonthlyHourTarget(days, regularTargetMinutes) {
     const appliesExtraordinaryHours = policy.appliesExtraordinaryHours !== false;
 
     if (day.dayType === "holiday") {
-      nextDay.plannedRegularMinutes = REGULAR_DAY_MINUTES;
-      nextDay.plannedRegularLabel = minutesLabel(REGULAR_DAY_MINUTES);
-      const regularMinutes = Math.min(REGULAR_DAY_MINUTES, remainingRegularMinutes);
-      remainingRegularMinutes -= regularMinutes;
-      nextDay.regularWorkedMinutes = regularMinutes;
-      nextDay.regularWorkedLabel = regularMinutes ? minutesLabel(regularMinutes) : "--";
+      nextDay.plannedRegularMinutes = 0;
+      nextDay.plannedRegularLabel = "--";
 
       if (workedMinutes > 0 && appliesExtraordinaryHours) {
         nextDay.extraordinaryMinutes = workedMinutes;
@@ -678,6 +1195,18 @@ function applyMonthlyHourTarget(days, regularTargetMinutes) {
       return nextDay;
     }
 
+    if (day.dayType === "weekend_overtime") {
+      if (!appliesExtraordinaryHours) {
+        return nextDay;
+      }
+
+      nextDay.extraordinaryMinutes = workedMinutes;
+      nextDay.extraordinaryLabel = minutesLabel(workedMinutes);
+      nextDay.tags = [...nextDay.tags, "Extraordinaria"];
+      nextDay.hasIssue = nextDay.tags.some(isAttendanceIssueTag);
+      return nextDay;
+    }
+
     if (isRestOrWeekendDay(day)) {
       if (!appliesExtraordinaryHours) {
         return nextDay;
@@ -690,11 +1219,15 @@ function applyMonthlyHourTarget(days, regularTargetMinutes) {
     }
 
     if (hasWorkWithoutScheduleTag(nextDay)) {
-      nextDay.hasIssue = true;
+      nextDay.hasIssue = nextDay.tags.some(isAttendanceIssueTag);
       return nextDay;
     }
 
-    const regularCandidateMinutes = Math.min(workedMinutes, REGULAR_DAY_MINUTES);
+    const dailyRegularLimitMinutes = Math.max(
+      0,
+      Math.min(Number(day.plannedRegularMinutes) || REGULAR_DAY_MINUTES, REGULAR_DAY_MINUTES),
+    );
+    const regularCandidateMinutes = Math.min(workedMinutes, dailyRegularLimitMinutes);
     const regularMinutes = Math.min(regularCandidateMinutes, remainingRegularMinutes);
     const afterTargetMinutes = regularCandidateMinutes - regularMinutes;
     const overDailyMinutes = Math.max(0, workedMinutes - regularCandidateMinutes);
@@ -703,12 +1236,13 @@ function applyMonthlyHourTarget(days, regularTargetMinutes) {
     nextDay.regularWorkedMinutes = regularMinutes;
     nextDay.regularWorkedLabel = regularMinutes ? minutesLabel(regularMinutes) : "--";
 
-    nextDay.supplementaryMinutes = appliesSupplementaryHours ? afterTargetMinutes + overDailyMinutes : 0;
+    const detectedSupplementaryMinutes = Math.max(0, afterTargetMinutes + overDailyMinutes);
+    nextDay.supplementaryMinutes = appliesSupplementaryHours
+      ? detectedSupplementaryMinutes
+      : 0;
     nextDay.supplementaryLabel = nextDay.supplementaryMinutes ? minutesLabel(nextDay.supplementaryMinutes) : "--";
 
-    nextDay.hasIssue = nextDay.tags.some((tag) =>
-      !["Extraordinaria"].includes(tag),
-    );
+    nextDay.hasIssue = nextDay.tags.some(isAttendanceIssueTag);
 
     return nextDay;
   });
@@ -750,9 +1284,10 @@ function applyWeeklyHourTargets(days) {
 }
 
 function compareDay(day, punches, laborRules, employee = {}) {
-  const sortedPunches = [...punches].sort((left, right) => left.punchedAt - right.punchedAt);
+  const sortedPunches = dedupePunchesByMinute(punches).sort((left, right) => left.punchedAt - right.punchedAt);
   const punchCount = sortedPunches.length;
   const isWorkingDay = isPlannedWorkDay(day);
+  const isExtraordinaryDay = isExtraordinaryAttendanceDay(day);
   const payrollPolicy = attendancePayrollPolicy(employee, laborRules);
   const scheduleAffectsSalary = payrollPolicy.scheduleAffectsSalary !== false;
   const shouldUsePlannedAttendance = !scheduleAffectsSalary && isWorkingDay && punchCount === 0;
@@ -763,6 +1298,7 @@ function compareDay(day, punches, laborRules, employee = {}) {
     !isWorkingDay;
   const isWeekendOrHoliday = isWeekendDateKey(day.dateKey) || day?.dayType === "holiday";
   const hasLunch = isWorkingDay && Number(day?.lunchDurationMinutes) > 0;
+  const hasHolidayLunchPunches = day?.dayType === "holiday" && punchCount >= 4;
   const expectedPunches = isWorkingDay ? (hasLunch ? 4 : 2) : 0;
   const scheduleStart = isWorkingDay ? combineDateAndTime(day.dateKey, day.startTime) : null;
   const scheduleEnd = isWorkingDay ? combineDateAndTime(day.dateKey, day.endTime) : null;
@@ -773,7 +1309,8 @@ function compareDay(day, punches, laborRules, employee = {}) {
   const twoPunchSpanMinutes = punchCount === 2 && firstPunch && lastPunch
     ? Math.max(0, Math.round((lastPunch.punchedAt - firstPunch.punchedAt) / 60000))
     : null;
-  const hasInsufficientTwoPunchSpan = twoPunchSpanMinutes !== null && twoPunchSpanMinutes < MIN_TWO_PUNCH_SPAN_MINUTES;
+  const minimumTwoPunchSpan = minimumTwoPunchSpanMinutes(day, employee);
+  const hasInsufficientTwoPunchSpan = twoPunchSpanMinutes !== null && twoPunchSpanMinutes < minimumTwoPunchSpan;
   const hasUnusablePunchesForPayroll =
     punchCount === 0 ||
     punchCount === 1 ||
@@ -788,6 +1325,7 @@ function compareDay(day, punches, laborRules, employee = {}) {
   let extraordinaryMinutes = 0;
   let additionalSupplementaryMinutes = 0;
   let actualLunchMinutes = null;
+  let lunchDiscountMinutes = 0;
   let lunchOverageMinutes = 0;
   let lunchOverageRemainderMinutes = 0;
 
@@ -800,9 +1338,12 @@ function compareDay(day, punches, laborRules, employee = {}) {
     const grossMinutes = lastPunch.punchedAt > countedStart
       ? Math.max(0, Math.round((lastPunch.punchedAt - countedStart) / 60000))
       : 0;
-    const scheduledLunchMinutes = hasLunch ? Number(day.lunchDurationMinutes) || 0 : 0;
+    const scheduledLunchMinutes = hasLunch
+      ? Number(day.lunchDurationMinutes) || 0
+      : (hasHolidayLunchPunches ? resolveHolidayLunchDiscountMinutes(laborRules, employee) : 0);
+    lunchDiscountMinutes = scheduledLunchMinutes;
     const lunchDiscount = Math.max(actualLunchMinutes || 0, scheduledLunchMinutes);
-    lunchOverageMinutes = Math.max(0, (actualLunchMinutes || 0) - scheduledLunchMinutes);
+    lunchOverageMinutes = Math.max(0, (actualLunchMinutes || 0) - lunchDiscountMinutes);
     workedMinutes = Math.max(0, grossMinutes - lunchDiscount);
   }
 
@@ -824,6 +1365,7 @@ function compareDay(day, punches, laborRules, employee = {}) {
     actualLunchMinutes = null;
     lunchOverageMinutes = 0;
     lunchOverageRemainderMinutes = 0;
+    lunchDiscountMinutes = 0;
   }
 
   if (isWorkingDay && punchCount === 0 && !shouldUsePlannedAttendance && !shouldSuppressScheduleIssues) {
@@ -831,11 +1373,12 @@ function compareDay(day, punches, laborRules, employee = {}) {
   }
 
   if (
-    isWorkingDay &&
+    (isWorkingDay || isExtraordinaryDay) &&
     punchCount > 0 &&
-    (punchCount < expectedPunches || punchCount % 2 !== 0) &&
+    (punchCount === 1 || punchCount === 3) &&
     !shouldUsePlannedAttendance &&
-    !shouldSuppressScheduleIssues
+    !shouldSuppressScheduleIssues &&
+    !shouldIgnorePunchesForPayroll
   ) {
     tags.push("Picadas incompletas");
   }
@@ -844,7 +1387,13 @@ function compareDay(day, punches, laborRules, employee = {}) {
     tags.push("Picadas insuficientes");
   }
 
-  if (isWorkingDay && punchCount > expectedPunches && !shouldUsePlannedAttendance && !shouldSuppressScheduleIssues) {
+  if (
+    isWorkingDay &&
+    punchCount > expectedPunches &&
+    punchCount % 2 === 0 &&
+    !shouldUsePlannedAttendance &&
+    !shouldSuppressScheduleIssues
+  ) {
     tags.push("Picadas adicionales");
   }
 
@@ -852,15 +1401,21 @@ function compareDay(day, punches, laborRules, employee = {}) {
     tags.push("Trabajo sin horario");
   }
 
-  if (isWorkingDay && scheduleStart && firstPunch && firstPunch.punchedAt > scheduleStart && !shouldUsePlannedAttendance && !hasInsufficientTwoPunchSpan && scheduleAffectsSalary) {
+  if (isWorkingDay && !isExtraordinaryDay && scheduleStart && firstPunch && firstPunch.punchedAt > scheduleStart && !shouldUsePlannedAttendance && !hasInsufficientTwoPunchSpan && scheduleAffectsSalary) {
     const rawLateMinutes = Math.max(0, Math.round((firstPunch.punchedAt - scheduleStart) / 60000));
     lateMinutes = rawLateMinutes > graceMinutes ? rawLateMinutes : 0;
     if (lateMinutes > 0) tags.push("Atraso");
   }
 
-  if (isWorkingDay && scheduleEnd && lastPunch && lastPunch.punchedAt < scheduleEnd && !shouldUsePlannedAttendance && !hasInsufficientTwoPunchSpan && scheduleAffectsSalary) {
+  if (isWorkingDay && punchCount >= 2 && scheduleEnd && lastPunch && lastPunch.punchedAt < scheduleEnd && !shouldUsePlannedAttendance && !hasInsufficientTwoPunchSpan && scheduleAffectsSalary) {
     earlyLeaveMinutes = Math.max(0, Math.round((scheduleEnd - lastPunch.punchedAt) / 60000));
-    if (earlyLeaveMinutes > 0) tags.push("Salida anticipada");
+    const earlyLeaveAffectsPlannedTime = isExtraordinaryDay
+      ? workedMinutes < plannedMinutes.scheduledWorkedMinutes
+      : workedMinutes < plannedMinutes.plannedRegularMinutes;
+
+    if (earlyLeaveMinutes > 0 && earlyLeaveAffectsPlannedTime) {
+      tags.push("Salida anticipada");
+    }
   }
 
   if (isWorkingDay && scheduleEnd && lastPunch && lastPunch.punchedAt > scheduleEnd && !shouldUsePlannedAttendance && !hasInsufficientTwoPunchSpan && payrollPolicy.appliesSupplementaryHours) {
@@ -872,23 +1427,39 @@ function compareDay(day, punches, laborRules, employee = {}) {
     lunchOverageRemainderMinutes = lunchOverageMinutes;
   }
 
-  const hasIssue = tags.some((tag) =>
-    !["Suplementaria", "Extraordinaria"].includes(tag),
-  ) || additionalSupplementaryMinutes > 0;
+  if (
+    isWorkingDay &&
+    scheduleEnd &&
+    lastPunch &&
+    plannedMinutes.plannedSupplementaryMinutes > 0 &&
+    !shouldUsePlannedAttendance &&
+    !hasInsufficientTwoPunchSpan &&
+    payrollPolicy.appliesSupplementaryHours
+  ) {
+    const supplementaryStart = new Date(scheduleEnd.getTime() - (plannedMinutes.plannedSupplementaryMinutes * 60000));
+    supplementaryMinutes = Math.max(0, Math.round((lastPunch.punchedAt - supplementaryStart) / 60000));
+  }
+
+  const hasIssue = tags.some(isAttendanceIssueTag);
+  const hasRestDayAttendance = day.dayType === "off_day" && punchCount > 0;
+  const displayDayTypeLabel = hasRestDayAttendance ? "Extraordinaria" : dayTypeLabel(day.dayType);
+  const displayScheduleLabel = hasRestDayAttendance ? "Extraordinaria" : buildScheduleLabel(day);
 
   return {
     dateKey: day.dateKey,
     dateLabel: formatEcuadorDate(new Date(`${day.dateKey}T12:00:00.000Z`)),
     dayLabel: day.label || "",
     dayType: day.dayType || "off_day",
-    dayTypeLabel: dayTypeLabel(day.dayType),
+    dayTypeLabel: displayDayTypeLabel,
     source: day.source || "calendar",
-    scheduleLabel: buildScheduleLabel(day),
+    scheduleLabel: displayScheduleLabel,
     startTime: day.startTime || "",
     endTime: day.endTime || "",
     lunchDurationMinutes: Number(day.lunchDurationMinutes) || 0,
     actualLunchMinutes,
     actualLunchLabel: actualLunchMinutes === null ? "--" : minutesLabel(actualLunchMinutes),
+    lunchDiscountMinutes,
+    lunchDiscountLabel: lunchDiscountMinutes ? minutesLabel(lunchDiscountMinutes) : "--",
     lunchOverageMinutes,
     lunchOverageLabel: lunchOverageMinutes ? minutesLabel(lunchOverageMinutes) : "--",
     lunchOverageRemainderMinutes,
@@ -943,8 +1514,10 @@ function emptyEmployeeSummary() {
     plannedSupplementaryMinutes: 0,
     plannedExtraordinaryMinutes: 0,
     supplementaryMinutes: 0,
+    detectedSupplementaryMinutes: 0,
     regularWorkedMinutes: 0,
     extraordinaryMinutes: 0,
+    detectedExtraordinaryMinutes: 0,
     unplannedExtraMinutes: 0,
     additionalSupplementaryMinutes: 0,
     issueDays: 0,
@@ -1073,16 +1646,33 @@ export async function GET(request) {
     const holidayDateKeys = new Set(holidays.map((holiday) => holiday.dateKey));
     const referenceDays = buildReferenceDaysInRange(contextStart, contextEnd, holidayDateKeys);
     const visibleReferenceDays = referenceDays.filter((day) => monthKeyFromDateKey(day.dateKey) === monthKey);
-    const baseLaborDays = countBaseLaborDays(visibleReferenceDays);
-    const regularTargetMinutes = baseLaborDays * REGULAR_DAY_MINUTES;
     const rows = employees.map((employee) => {
       const employeeKey = toId(employee);
+      const employmentStartDateKey = resolveEmploymentStartDateKey(employee);
+      const employeeVisibleReferenceDays = visibleReferenceDays
+        .map((day) => applyEmploymentStartDay(day, employmentStartDateKey));
+      const baseLaborDays = countBaseLaborDays(employeeVisibleReferenceDays);
+      const regularTargetMinutes = baseLaborDays * REGULAR_DAY_MINUTES;
       const vacationDateKeys = vacationDateKeysByEmployee.get(employeeKey) || new Set();
-      const comparableDays = referenceDays.map((referenceDay) => {
+      const baseComparableDays = referenceDays.map((referenceDay) => {
         const assignment = assignmentsByEmployeeMonth.get(`${employeeKey}|${monthKeyFromDateKey(referenceDay.dateKey)}`);
 
-        return applyVacationDay(mergeReferenceDaysWithAssignment([referenceDay], assignment)[0], vacationDateKeys);
+        const assignedDay = mergeReferenceDaysWithAssignment([referenceDay], assignment)[0];
+
+        return applyVacationDay(applyEmploymentStartDay(assignedDay, employmentStartDateKey), vacationDateKeys);
       });
+      const employeePunchesByDate = new Map(
+        referenceDays.map((day) => [
+          day.dateKey,
+          punchesByEmployeeDate.get(`${employeeKey}|${day.dateKey}`) || [],
+        ]),
+      );
+      const comparableDays = inferWeeklyAttendanceSchedule(
+        baseComparableDays,
+        employeePunchesByDate,
+      employee,
+      laborRules,
+      ).map((day) => applyLunchPolicyByDay(day, employee, laborRules));
       const comparedDays = comparableDays.map((day) =>
         compareDay(day, punchesByEmployeeDate.get(`${employeeKey}|${day.dateKey}`) || [], laborRules, employee),
       );
@@ -1102,6 +1692,9 @@ export async function GET(request) {
         if (day.tags.includes("Picadas incompletas") || day.tags.includes("Picadas insuficientes")) {
           totals.missingPunchDays += 1;
         }
+        if (day.tags.includes("Salida anticipada")) {
+          totals.missingPunchDays += 1;
+        }
         if (day.lateMinutes > 0) totals.lateDays += 1;
         if (day.earlyLeaveMinutes > 0) totals.earlyLeaveDays += 1;
         if (day.tags.includes("Picadas adicionales")) totals.extraPunchDays += 1;
@@ -1115,27 +1708,43 @@ export async function GET(request) {
 
         totals.plannedRegularMinutes += day.plannedRegularMinutes;
         totals.plannedSupplementaryMinutes += day.plannedSupplementaryMinutes;
-        totals.plannedExtraordinaryMinutes += day.dayType === "weekend_overtime" ? day.scheduledWorkedMinutes : 0;
+        totals.plannedExtraordinaryMinutes += resolvePlannedExtraordinaryMinutes(day);
         totals.lateMinutes += day.lateMinutes;
         totals.earlyLeaveMinutes += day.earlyLeaveMinutes;
         totals.regularWorkedMinutes += day.regularWorkedMinutes;
         totals.supplementaryMinutes += day.supplementaryMinutes;
+        totals.detectedSupplementaryMinutes += Number(day.detectedSupplementaryMinutes) || 0;
         totals.extraordinaryMinutes += day.extraordinaryMinutes;
+        totals.detectedExtraordinaryMinutes += Number(day.detectedExtraordinaryMinutes) || 0;
         totals.unplannedExtraMinutes += day.additionalSupplementaryMinutes;
         totals.additionalSupplementaryMinutes += day.additionalSupplementaryMinutes;
         return totals;
       }, emptyEmployeeSummary());
+      summary.plannedRegularMinutes = Math.min(summary.plannedRegularMinutes, regularTargetMinutes);
+      summary.regularWorkedMinutes = Math.min(summary.regularWorkedMinutes, regularTargetMinutes);
       const salary = Number(employee.salary) || 0;
-      const hourlyDivisor = Math.max(regularTargetMinutes / 60, REGULAR_DAY_MINUTES / 60);
+      const hourlyDivisor = 30 * (REGULAR_DAY_MINUTES / 60);
       const hourlyRate = hourlyDivisor > 0 ? salary / hourlyDivisor : 0;
-      const supplementaryMultiplier = Number(laborRules?.supplementaryMultiplier) || 1.5;
-      const extraordinaryMultiplier = Number(laborRules?.extraordinaryMultiplier) || 2;
       const daysWithPay = days.map((day) => ({
         ...day,
-        pay: buildDailyPay(day, hourlyRate, { supplementaryMultiplier, extraordinaryMultiplier }),
+        pay: buildDailyPay(day, hourlyRate),
       }));
       const salaryExpected = salary;
-      const salaryProjected = daysWithPay.reduce((total, day) => total + (Number(day.pay.rawTotal) || 0), 0);
+      const additionalPayrollTotal = daysWithPay.reduce((total, day) => {
+        const items = day.pay?.items || [];
+
+        return total + items.reduce((dayTotal, item) =>
+          dayTotal + (item.label === "Laboral" ? 0 : Number(item.rawAmount) || 0), 0);
+      }, 0);
+      const plannedPayrollTotal =
+        (summary.plannedSupplementaryMinutes / 60) * hourlyRate * SUPPLEMENTARY_SURCHARGE_MULTIPLIER +
+        (summary.plannedExtraordinaryMinutes / 60) * hourlyRate * EXTRAORDINARY_SURCHARGE_MULTIPLIER;
+      const realPayrollTotal =
+        (summary.detectedSupplementaryMinutes / 60) * hourlyRate * SUPPLEMENTARY_SURCHARGE_MULTIPLIER +
+        (summary.detectedExtraordinaryMinutes / 60) * hourlyRate * EXTRAORDINARY_SURCHARGE_MULTIPLIER;
+      const salaryPlanned = salary + plannedPayrollTotal;
+      const salaryReal = salary + realPayrollTotal;
+      const salaryProjected = salary + additionalPayrollTotal;
 
       return {
         employee: {
@@ -1162,16 +1771,22 @@ export async function GET(request) {
           plannedExtraordinaryLabel: minutesLabel(summary.plannedExtraordinaryMinutes),
           salaryExpected: money(salaryExpected),
           salaryExpectedLabel: moneyLabel(salaryExpected),
+          salaryPlanned: money(salaryPlanned),
+          salaryPlannedLabel: moneyLabel(salaryPlanned),
+          salaryReal: money(salaryReal),
+          salaryRealLabel: moneyLabel(salaryReal),
           salaryProjected: money(salaryProjected),
           salaryProjectedLabel: moneyLabel(salaryProjected),
           hourlyRate: money(hourlyRate),
           hourlyRateRaw: hourlyRate,
           hourlyRateLabel: moneyLabel(hourlyRate),
-          supplementaryMultiplier,
-          extraordinaryMultiplier,
+          supplementaryMultiplier: SUPPLEMENTARY_SURCHARGE_MULTIPLIER,
+          extraordinaryMultiplier: EXTRAORDINARY_SURCHARGE_MULTIPLIER,
           regularWorkedLabel: minutesLabel(summary.regularWorkedMinutes),
           supplementaryLabel: minutesLabel(summary.supplementaryMinutes),
+          detectedSupplementaryLabel: minutesLabel(summary.detectedSupplementaryMinutes),
           extraordinaryLabel: minutesLabel(summary.extraordinaryMinutes),
+          detectedExtraordinaryLabel: minutesLabel(summary.detectedExtraordinaryMinutes),
           unplannedExtraLabel: minutesLabel(summary.unplannedExtraMinutes),
           additionalSupplementaryLabel: minutesLabel(summary.additionalSupplementaryMinutes),
           lateLabel: minutesLabel(summary.lateMinutes),
@@ -1185,7 +1800,7 @@ export async function GET(request) {
       (totals, row) => {
         totals.employees += 1;
         if (!row.hasSchedule) totals.withoutSchedule += 1;
-        if (row.summary.issueDays > 0 || !row.hasSchedule) totals.withIssues += 1;
+        if (row.summary.issueDays > 0) totals.withIssues += 1;
         totals.issueDays += row.summary.issueDays;
         totals.absentDays += row.summary.absentDays;
         totals.missingPunchDays += row.summary.missingPunchDays;
@@ -1200,7 +1815,9 @@ export async function GET(request) {
         totals.plannedExtraordinaryMinutes += row.summary.plannedExtraordinaryMinutes;
         totals.regularWorkedMinutes += row.summary.regularWorkedMinutes;
         totals.supplementaryMinutes += row.summary.supplementaryMinutes;
+        totals.detectedSupplementaryMinutes += row.summary.detectedSupplementaryMinutes;
         totals.extraordinaryMinutes += row.summary.extraordinaryMinutes;
+        totals.detectedExtraordinaryMinutes += row.summary.detectedExtraordinaryMinutes;
         totals.unplannedExtraMinutes += row.summary.additionalSupplementaryMinutes;
         totals.additionalSupplementaryMinutes = (totals.additionalSupplementaryMinutes || 0) + row.summary.additionalSupplementaryMinutes;
         return totals;
@@ -1223,7 +1840,9 @@ export async function GET(request) {
         plannedExtraordinaryMinutes: 0,
         regularWorkedMinutes: 0,
         supplementaryMinutes: 0,
+        detectedSupplementaryMinutes: 0,
         extraordinaryMinutes: 0,
+        detectedExtraordinaryMinutes: 0,
         unplannedExtraMinutes: 0,
         additionalSupplementaryMinutes: 0,
       },
@@ -1238,7 +1857,9 @@ export async function GET(request) {
         plannedExtraordinaryLabel: minutesLabel(summary.plannedExtraordinaryMinutes),
         regularWorkedLabel: minutesLabel(summary.regularWorkedMinutes),
         supplementaryLabel: minutesLabel(summary.supplementaryMinutes),
+        detectedSupplementaryLabel: minutesLabel(summary.detectedSupplementaryMinutes),
         extraordinaryLabel: minutesLabel(summary.extraordinaryMinutes),
+        detectedExtraordinaryLabel: minutesLabel(summary.detectedExtraordinaryMinutes),
         unplannedExtraLabel: minutesLabel(summary.unplannedExtraMinutes),
         additionalSupplementaryLabel: minutesLabel(summary.additionalSupplementaryMinutes),
         lateLabel: minutesLabel(summary.lateMinutes),

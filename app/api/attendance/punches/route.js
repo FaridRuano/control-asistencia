@@ -5,6 +5,7 @@ import { isAuthenticated } from "@/lib/auth";
 import { formatEcuadorDateTime } from "@/lib/datetime/ecuador";
 import connectToDatabase from "@/lib/db/mongodb";
 import { serializeEmployee } from "@/lib/employees";
+import { buildPunchMinuteRange } from "@/lib/attendance/punchIdentity";
 import { parsePunchDateTime, resolvePunchRange } from "@/lib/attendance/punches";
 import AuditLog from "@/models/AuditLog";
 import AttendancePunch from "@/models/AttendancePunch";
@@ -195,14 +196,20 @@ export async function POST(request) {
       throw new Error("Ingresa una fecha y hora válida.");
     }
 
-    const existingPunch = await AttendancePunch.findOne({
-      employee: employee._id,
-      punchedAt,
-    }).lean();
+    const minuteRange = buildPunchMinuteRange(punchedAt);
+    const existingPunch = minuteRange
+      ? await AttendancePunch.findOne({
+          employee: employee._id,
+          punchedAt: {
+            $gte: minuteRange.start,
+            $lt: minuteRange.end,
+          },
+        }).lean()
+      : null;
 
     if (existingPunch) {
       return NextResponse.json(
-        { error: "Ya existe una picada para ese empleado en esa fecha y hora." },
+        { error: "Ya existe una picada para ese empleado en esa fecha, hora y minuto." },
         { status: 409 },
       );
     }

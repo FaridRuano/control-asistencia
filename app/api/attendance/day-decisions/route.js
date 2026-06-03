@@ -6,7 +6,20 @@ import connectToDatabase from "@/lib/db/mongodb";
 import AttendanceDayDecision from "@/models/AttendanceDayDecision";
 import Employee from "@/models/Employee";
 
-const DECISIONS = new Set(["full", "planned", "none", "custom", "discount_day", "pay_planned_day", "reviewed"]);
+const DECISIONS = new Set([
+  "full",
+  "planned",
+  "none",
+  "custom",
+  "discount_day",
+  "pay_planned_day",
+  "complete_regular_day",
+  "reviewed",
+  "justify_early_leave",
+  "justify_no_punches",
+  "justify_incomplete_punches",
+  "justify_late",
+]);
 
 function minutes(value) {
   return Math.max(0, Math.round(Number(value) || 0));
@@ -22,6 +35,31 @@ function parseDateKey(value) {
   return dateKey;
 }
 
+function parseMonthKey(value) {
+  const monthKey = String(value || "").trim();
+
+  if (!/^\d{4}-\d{2}$/.test(monthKey)) {
+    throw new Error("El mes de la decisión no es válido.");
+  }
+
+  return monthKey;
+}
+
+function employeeFilterFromBody(body = {}) {
+  const query = { isActive: { $ne: false } };
+  const employeeId = String(body?.employeeId || "").trim();
+  const branchCode = String(body?.branchCode || "").trim().toUpperCase();
+  const areaCode = String(body?.areaCode || "").trim().toUpperCase();
+  const roleCode = String(body?.roleCode || "").trim().toUpperCase();
+
+  if (employeeId) query._id = employeeId;
+  if (branchCode) query.branchCode = branchCode;
+  if (areaCode) query.areaCode = areaCode;
+  if (roleCode) query.roleCode = roleCode;
+
+  return query;
+}
+
 function normalizePayload(body) {
   const employeeId = String(body?.employeeId || "").trim();
   const dateKey = parseDateKey(body?.dateKey);
@@ -29,11 +67,15 @@ function normalizePayload(body) {
   const detectedSupplementaryMinutes = minutes(body?.detectedSupplementaryMinutes);
   const detectedExtraordinaryMinutes = minutes(body?.detectedExtraordinaryMinutes);
   const detectedLateMinutes = minutes(body?.detectedLateMinutes);
+  const detectedEarlyLeaveMinutes = minutes(body?.detectedEarlyLeaveMinutes);
   let authorizedSupplementaryMinutes = minutes(body?.authorizedSupplementaryMinutes);
   let authorizedExtraordinaryMinutes = minutes(body?.authorizedExtraordinaryMinutes);
   let adjustedLateMinutes = body?.adjustedLateMinutes === undefined || body?.adjustedLateMinutes === null
     ? detectedLateMinutes
     : minutes(body?.adjustedLateMinutes);
+  let adjustedEarlyLeaveMinutes = body?.adjustedEarlyLeaveMinutes === undefined || body?.adjustedEarlyLeaveMinutes === null
+    ? detectedEarlyLeaveMinutes
+    : minutes(body?.adjustedEarlyLeaveMinutes);
 
   if (!employeeId) {
     throw new Error("Debes indicar el empleado.");
@@ -52,17 +94,33 @@ function normalizePayload(body) {
     authorizedSupplementaryMinutes = 0;
     authorizedExtraordinaryMinutes = 0;
     adjustedLateMinutes = 0;
+    adjustedEarlyLeaveMinutes = 0;
   }
 
   if (decision === "reviewed") {
     authorizedSupplementaryMinutes = 0;
     authorizedExtraordinaryMinutes = 0;
     adjustedLateMinutes = detectedLateMinutes;
+    adjustedEarlyLeaveMinutes = detectedEarlyLeaveMinutes;
+  }
+
+  if (["pay_planned_day", "complete_regular_day", "justify_early_leave", "justify_no_punches", "justify_incomplete_punches"].includes(decision)) {
+    adjustedEarlyLeaveMinutes = 0;
+  }
+
+  if (["pay_planned_day", "complete_regular_day", "justify_no_punches", "justify_incomplete_punches", "justify_late"].includes(decision)) {
+    adjustedLateMinutes = 0;
+  }
+
+  if (decision === "complete_regular_day") {
+    authorizedSupplementaryMinutes = 0;
+    authorizedExtraordinaryMinutes = 0;
   }
 
   authorizedSupplementaryMinutes = Math.min(authorizedSupplementaryMinutes, detectedSupplementaryMinutes);
   authorizedExtraordinaryMinutes = Math.min(authorizedExtraordinaryMinutes, detectedExtraordinaryMinutes);
   adjustedLateMinutes = Math.min(adjustedLateMinutes, detectedLateMinutes);
+  adjustedEarlyLeaveMinutes = Math.min(adjustedEarlyLeaveMinutes, detectedEarlyLeaveMinutes);
 
   return {
     employeeId,
@@ -74,6 +132,8 @@ function normalizePayload(body) {
     detectedExtraordinaryMinutes,
     detectedLateMinutes,
     adjustedLateMinutes,
+    detectedEarlyLeaveMinutes,
+    adjustedEarlyLeaveMinutes,
     note: String(body?.note || "").trim().slice(0, 240),
   };
 }
@@ -118,6 +178,8 @@ export async function POST(request) {
           detectedExtraordinaryMinutes: payload.detectedExtraordinaryMinutes,
           detectedLateMinutes: payload.detectedLateMinutes,
           adjustedLateMinutes: payload.adjustedLateMinutes,
+          detectedEarlyLeaveMinutes: payload.detectedEarlyLeaveMinutes,
+          adjustedEarlyLeaveMinutes: payload.adjustedEarlyLeaveMinutes,
           note: payload.note,
           decidedBy: actor,
         },
@@ -152,6 +214,8 @@ export async function POST(request) {
           detectedExtraordinaryMinutes: previousDecision.detectedExtraordinaryMinutes,
           detectedLateMinutes: previousDecision.detectedLateMinutes || 0,
           adjustedLateMinutes: previousDecision.adjustedLateMinutes || 0,
+          detectedEarlyLeaveMinutes: previousDecision.detectedEarlyLeaveMinutes || 0,
+          adjustedEarlyLeaveMinutes: previousDecision.adjustedEarlyLeaveMinutes || 0,
           note: previousDecision.note || "",
           decidedBy: previousDecision.decidedBy || "",
           updatedAt: previousDecision.updatedAt || null,
@@ -164,6 +228,8 @@ export async function POST(request) {
           detectedExtraordinaryMinutes: payload.detectedExtraordinaryMinutes,
           detectedLateMinutes: payload.detectedLateMinutes,
           adjustedLateMinutes: payload.adjustedLateMinutes,
+          detectedEarlyLeaveMinutes: payload.detectedEarlyLeaveMinutes,
+          adjustedEarlyLeaveMinutes: payload.adjustedEarlyLeaveMinutes,
           note: payload.note,
           decidedBy: actor,
         },
@@ -191,6 +257,65 @@ export async function DELETE(request) {
 
   try {
     const body = await request.json();
+    const scope = String(body?.scope || "").trim();
+
+    if (scope === "month") {
+      const monthKey = parseMonthKey(body?.month);
+
+      await connectToDatabase();
+
+      const employees = await Employee.find(employeeFilterFromBody(body)).select("_id fullName").lean();
+      const employeeIds = employees.map((employee) => employee._id);
+      const employeeNameById = new Map(employees.map((employee) => [employee._id.toString(), employee.fullName || ""]));
+      const previousDecisions = employeeIds.length
+        ? await AttendanceDayDecision.find({
+            employee: { $in: employeeIds },
+            dateKey: { $regex: `^${monthKey}` },
+          }).lean()
+        : [];
+      const actor = user.employeeName || user.username || user.id;
+
+      if (previousDecisions.length) {
+        await AttendanceDayDecision.deleteMany({
+          _id: { $in: previousDecisions.map((decision) => decision._id) },
+        });
+      }
+
+      await createAuditLog({
+        actor,
+        action: "attendanceDayDecision.bulkDelete",
+        entityType: "attendanceDayDecision",
+        entityId: `${monthKey}:${previousDecisions.length}`,
+        entityLabel: `Reinicio decisiones ${monthKey}`,
+        route: "/api/attendance/day-decisions",
+        details: {
+          monthKey,
+          filters: {
+            employeeId: String(body?.employeeId || "").trim(),
+            branchCode: String(body?.branchCode || "").trim().toUpperCase(),
+            areaCode: String(body?.areaCode || "").trim().toUpperCase(),
+            roleCode: String(body?.roleCode || "").trim().toUpperCase(),
+          },
+          deletedCount: previousDecisions.length,
+          deletedDecisions: previousDecisions.slice(0, 200).map((decision) => ({
+            id: decision._id?.toString?.() || "",
+            employeeId: decision.employee?.toString?.() || "",
+            employeeName: employeeNameById.get(decision.employee?.toString?.() || "") || "",
+            dateKey: decision.dateKey,
+            decision: decision.decision,
+          })),
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
+        deletedCount: previousDecisions.length,
+        message: previousDecisions.length
+          ? "Decisiones reiniciadas correctamente."
+          : "No había decisiones guardadas para reiniciar.",
+      });
+    }
+
     const employeeId = String(body?.employeeId || "").trim();
     const dateKey = parseDateKey(body?.dateKey);
 
@@ -230,6 +355,8 @@ export async function DELETE(request) {
           detectedExtraordinaryMinutes: previousDecision.detectedExtraordinaryMinutes,
           detectedLateMinutes: previousDecision.detectedLateMinutes || 0,
           adjustedLateMinutes: previousDecision.adjustedLateMinutes || 0,
+          detectedEarlyLeaveMinutes: previousDecision.detectedEarlyLeaveMinutes || 0,
+          adjustedEarlyLeaveMinutes: previousDecision.adjustedEarlyLeaveMinutes || 0,
           note: previousDecision.note || "",
           decidedBy: previousDecision.decidedBy || "",
           updatedAt: previousDecision.updatedAt || null,

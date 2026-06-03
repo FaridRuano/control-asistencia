@@ -88,13 +88,6 @@ export default function ConfirmDialog({
 
         {children ? <div className={styles.body}>{children}</div> : null}
 
-        {isPending ? (
-          <div className={styles.pendingState} role="status" aria-live="polite">
-            <Loader2 size={17} className={styles.spinner} />
-            <span>Procesando cambios...</span>
-          </div>
-        ) : null}
-
         <div className={styles.actions}>
           <button
             type="button"

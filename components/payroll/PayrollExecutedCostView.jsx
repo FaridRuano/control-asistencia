@@ -78,7 +78,7 @@ function GroupTable({ title, icon: Icon, rows }) {
               </div>
               <p>{formatMoney(row.totalCost)}</p>
               <small>
-                {formatMoney(row.supplementaryCost)} sup. · {formatMoney(row.extraordinaryCost)} extra · {formatMoney(row.lateDeduction)} atraso
+                {formatMoney(row.supplementaryCost)} sup. · {formatMoney(row.extraordinaryCost)} extra · {formatHours(row.lateHours)} atraso control
               </small>
             </article>
           ))}
@@ -375,7 +375,7 @@ export default function PayrollExecutedCostView() {
                       <td data-label="Atrasos">
                         {row.lateHours ? (
                           <>
-                            <strong>-{formatMoney(row.lateDeduction)}</strong>
+                            <strong>Control</strong>
                             <span>{formatHours(row.lateHours)}</span>
                           </>
                         ) : <EmptyValue />}

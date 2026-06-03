@@ -7,6 +7,25 @@ const normalizedEmployeeSchema = new Schema(
     branchCode: { type: String, default: "" },
     branchName: { type: String, default: "" },
     department: { type: String, default: "" },
+    matchedEmployeeId: { type: String, default: "" },
+    matchedEmployeeName: { type: String, default: "" },
+    matchedEmployeeIsActive: { type: Boolean, default: false },
+    matchStatus: {
+      type: String,
+      enum: ["matched", "inactive", "unmatched"],
+      default: "unmatched",
+    },
+    duplicateMinuteCount: { type: Number, default: 0 },
+    irregularDayCount: { type: Number, default: 0 },
+    irregularDays: {
+      type: [
+        {
+          date: { type: String, default: "" },
+          punchCount: { type: Number, default: 0 },
+        },
+      ],
+      default: [],
+    },
     punchCount: { type: Number, default: 0 },
     punches: [
       {
@@ -81,6 +100,11 @@ const attendanceUploadSchema = new Schema(
         totalPunches: { type: Number, default: 0 },
         month: { type: Number, default: null },
         year: { type: Number, default: null },
+        matchedEmployees: { type: Number, default: 0 },
+        inactiveEmployees: { type: Number, default: 0 },
+        unmatchedEmployees: { type: Number, default: 0 },
+        duplicateMinutePunches: { type: Number, default: 0 },
+        irregularDays: { type: Number, default: 0 },
       },
       employees: {
         type: [normalizedEmployeeSchema],

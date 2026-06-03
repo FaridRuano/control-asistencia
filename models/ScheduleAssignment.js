@@ -45,7 +45,14 @@ const generatedDaySchema = new Schema(
     },
     source: {
       type: String,
-      enum: ["template", "holiday"],
+      enum: [
+        "template",
+        "holiday",
+        "manual_override",
+        "attendance_inferred",
+        "attendance_extra",
+        "attendance_rest",
+      ],
       default: "template",
     },
   },

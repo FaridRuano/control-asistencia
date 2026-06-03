@@ -143,8 +143,8 @@ export async function GET(request) {
       dailyBaseHours: Number(rules?.dailyBaseHours) || 8,
     });
     const hourlyDivisor = monthlyBase.hourlyDivisor;
-    const supplementaryMultiplier = Number(rules?.supplementaryMultiplier) || 1.5;
-    const extraordinaryMultiplier = Number(rules?.extraordinaryMultiplier) || 2;
+    const supplementaryMultiplier = 0.5;
+    const extraordinaryMultiplier = 1;
     const rows = filteredRows.map((row) => {
       const employeeId = row.employee?.toString?.() || "";
       const salary = salaryByEmployee.get(employeeId) || 0;
@@ -178,7 +178,7 @@ export async function GET(request) {
         supplementaryCost: money(supplementaryCost),
         extraordinaryCost: money(extraordinaryCost),
         lateDeduction: money(lateDeduction),
-        totalCost: money(normalCost + supplementaryCost + extraordinaryCost - lateDeduction),
+        totalCost: money(normalCost + supplementaryCost + extraordinaryCost),
         payment: payment ? {
           isPaid: true,
           paymentMethod: payment.paymentMethod || "",

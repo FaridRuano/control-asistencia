@@ -6,8 +6,11 @@ import {
   buildPublishMessage,
   publishAttendancePunches,
 } from "@/lib/attendance/publishAttendancePunches";
+import { buildPunchMinuteKey } from "@/lib/attendance/punchIdentity";
 import connectToDatabase from "@/lib/db/mongodb";
+import { formatEcuadorDateKey } from "@/lib/datetime/ecuador";
 import AttendanceUpload from "@/models/AttendanceUpload";
+import Employee from "@/models/Employee";
 
 function normalizeStoredFileToBuffer(value) {
   if (!value) {
@@ -25,7 +28,34 @@ function normalizeStoredFileToBuffer(value) {
   return Buffer.from(value);
 }
 
+function buildReconciliationSummary(employees = []) {
+  return employees.reduce(
+    (summary, employee) => {
+      if (employee.matchStatus === "matched") {
+        summary.matchedEmployees += 1;
+      } else if (employee.matchStatus === "inactive") {
+        summary.inactiveEmployees += 1;
+      } else {
+        summary.unmatchedEmployees += 1;
+      }
+
+      summary.duplicateMinutePunches += employee.duplicateMinuteCount || 0;
+      summary.irregularDays += employee.irregularDayCount || 0;
+
+      return summary;
+    },
+    {
+      matchedEmployees: 0,
+      inactiveEmployees: 0,
+      unmatchedEmployees: 0,
+      duplicateMinutePunches: 0,
+      irregularDays: 0,
+    },
+  );
+}
+
 function buildNormalizedPayload(upload, normalizedSnapshot, source) {
+  const reconciliationSummary = buildReconciliationSummary(normalizedSnapshot.employees || []);
   const publishSummary = upload.punchesPublishedAt
     ? {
         publishedAt: upload.punchesPublishedAt,
@@ -53,6 +83,17 @@ function buildNormalizedPayload(upload, normalizedSnapshot, source) {
       totalPunches: normalizedSnapshot.summary.totalPunches,
       month: normalizedSnapshot.summary.month,
       year: normalizedSnapshot.summary.year,
+      matchedEmployees:
+        normalizedSnapshot.summary.matchedEmployees ?? reconciliationSummary.matchedEmployees,
+      inactiveEmployees:
+        normalizedSnapshot.summary.inactiveEmployees ?? reconciliationSummary.inactiveEmployees,
+      unmatchedEmployees:
+        normalizedSnapshot.summary.unmatchedEmployees ?? reconciliationSummary.unmatchedEmployees,
+      duplicateMinutePunches:
+        normalizedSnapshot.summary.duplicateMinutePunches ??
+        reconciliationSummary.duplicateMinutePunches,
+      irregularDays:
+        normalizedSnapshot.summary.irregularDays ?? reconciliationSummary.irregularDays,
     },
     employees: normalizedSnapshot.employees,
     parserLogs: normalizedSnapshot.parserLogs,
@@ -61,26 +102,164 @@ function buildNormalizedPayload(upload, normalizedSnapshot, source) {
   };
 }
 
-function buildNormalizedSnapshot(parsedFile) {
+function getPunchDiagnostics(punches = []) {
+  const uniquePunchesByMinute = new Map();
+  const uniquePunches = [];
+
+  for (const punch of punches) {
+    const minuteKey = buildPunchMinuteKey(punch.punchedAt);
+
+    if (!minuteKey || uniquePunchesByMinute.has(minuteKey)) {
+      continue;
+    }
+
+    uniquePunchesByMinute.set(minuteKey, punch);
+    uniquePunches.push(punch);
+  }
+
+  const punchesByDay = new Map();
+
+  for (const punch of uniquePunches) {
+    const dayKey = formatEcuadorDateKey(punch.punchedAt);
+
+    if (!dayKey) {
+      continue;
+    }
+
+    if (!punchesByDay.has(dayKey)) {
+      punchesByDay.set(dayKey, []);
+    }
+
+    punchesByDay.get(dayKey).push(punch);
+  }
+
+  const irregularDays = [...punchesByDay.entries()]
+    .map(([date, dayPunches]) => {
+      const sortedPunches = [...dayPunches].sort(
+        (left, right) => new Date(left.punchedAt).getTime() - new Date(right.punchedAt).getTime(),
+      );
+      const punchCount = sortedPunches.length;
+      const firstPunchTime = new Date(sortedPunches[0]?.punchedAt).getTime();
+      const lastPunchTime = new Date(sortedPunches[punchCount - 1]?.punchedAt).getTime();
+      const spanMinutes =
+        Number.isFinite(firstPunchTime) && Number.isFinite(lastPunchTime)
+          ? Math.round((lastPunchTime - firstPunchTime) / 60000)
+          : 0;
+      const isIrregular =
+        punchCount === 1 ||
+        punchCount === 3 ||
+        punchCount > 4 ||
+        (punchCount === 2 && spanMinutes < 60);
+
+      return isIrregular ? { date, punchCount } : null;
+    })
+    .filter(Boolean);
+
+  return {
+    duplicateMinuteCount: Math.max(0, punches.length - uniquePunches.length),
+    irregularDays,
+  };
+}
+
+async function buildNormalizedSnapshot(parsedFile) {
+  const branchCode = String(parsedFile.branchCode || "").trim().toUpperCase();
+  const biometricCodes = [
+    ...new Set(parsedFile.employees.map((employee) => String(employee.biometricCode || "").trim())),
+  ].filter(Boolean);
+  const employeesByBiometric = new Map();
+
+  if (branchCode && biometricCodes.length) {
+    const employees = await Employee.find({
+      $or: [
+        {
+          branchCode,
+          biometricCode: { $in: biometricCodes },
+        },
+        {
+          biometricAliases: {
+            $elemMatch: {
+              branchCode,
+              biometricCode: { $in: biometricCodes },
+            },
+          },
+        },
+      ],
+    })
+      .select({
+        _id: 1,
+        fullName: 1,
+        biometricCode: 1,
+        biometricAliases: 1,
+        branchCode: 1,
+        branchName: 1,
+        areaName: 1,
+        roleName: 1,
+        isActive: 1,
+      })
+      .lean();
+
+    for (const employee of employees) {
+      const codes = [
+        employee.branchCode === branchCode ? String(employee.biometricCode || "").trim() : "",
+        ...(employee.biometricAliases || [])
+          .filter((alias) => String(alias.branchCode || "").trim().toUpperCase() === branchCode)
+          .map((alias) => String(alias.biometricCode || "").trim()),
+      ].filter(Boolean);
+
+      codes.forEach((code) => {
+        const current = employeesByBiometric.get(code);
+
+        if (!current || current.isActive === false) {
+          employeesByBiometric.set(code, employee);
+        }
+      });
+    }
+  }
+
+  const normalizedEmployees = parsedFile.employees.map((employee) => {
+    const biometricCode = String(employee.biometricCode || "").trim();
+    const matchedEmployee = employeesByBiometric.get(biometricCode);
+    const diagnostics = getPunchDiagnostics(employee.punches || []);
+    const matchStatus = matchedEmployee
+      ? matchedEmployee.isActive === false
+        ? "inactive"
+        : "matched"
+      : "unmatched";
+    const matchedEmployeeName = matchedEmployee?.fullName || "";
+
+    return {
+      biometricCode,
+      fullName: matchedEmployeeName || employee.name,
+      branchCode: parsedFile.branchCode || "",
+      branchName: parsedFile.branchName || "",
+      department:
+        [matchedEmployee?.areaName, matchedEmployee?.roleName].filter(Boolean).join(" · ") ||
+        employee.department,
+      matchedEmployeeId: matchedEmployee?._id?.toString?.() || "",
+      matchedEmployeeName,
+      matchedEmployeeIsActive: Boolean(matchedEmployee && matchedEmployee.isActive !== false),
+      matchStatus,
+      duplicateMinuteCount: diagnostics.duplicateMinuteCount,
+      irregularDayCount: diagnostics.irregularDays.length,
+      irregularDays: diagnostics.irregularDays.slice(0, 12),
+      punchCount: employee.punches.length,
+      punches: employee.punches.map((punch) => ({
+        punchedAt: punch.punchedAt,
+        rawValue: punch.rawValue,
+      })),
+    };
+  });
+  const reconciliationSummary = buildReconciliationSummary(normalizedEmployees);
+
   return {
     summary: {
       totalEmployees: parsedFile.employees.length,
       totalPunches: parsedFile.totalPunches,
       month: parsedFile.month,
       year: parsedFile.year,
+      ...reconciliationSummary,
     },
-    employees: parsedFile.employees.map((employee) => ({
-      biometricCode: employee.biometricCode,
-      fullName: employee.name,
-      branchCode: parsedFile.branchCode || "",
-      branchName: parsedFile.branchName || "",
-      department: employee.department,
-      punchCount: employee.punches.length,
-      punches: employee.punches.map((punch) => ({
-        punchedAt: punch.punchedAt,
-        rawValue: punch.rawValue,
-      })),
-    })),
+    employees: normalizedEmployees,
     parserLogs: parsedFile.logs,
   };
 }
@@ -130,9 +309,9 @@ export async function GET(_request, context) {
       branchName: upload.branchName || "",
     });
 
-    return NextResponse.json(
-      buildNormalizedPayload(upload, buildNormalizedSnapshot(parsedFile), "live"),
-    );
+    const normalizedSnapshot = await buildNormalizedSnapshot(parsedFile);
+
+    return NextResponse.json(buildNormalizedPayload(upload, normalizedSnapshot, "live"));
   } catch (error) {
     console.error("attendance-normalize-error", error);
 
@@ -182,7 +361,7 @@ export async function POST(_request, context) {
       branchName: upload.branchName || "",
     });
 
-    upload.normalizedSnapshot = buildNormalizedSnapshot(parsedFile);
+    upload.normalizedSnapshot = await buildNormalizedSnapshot(parsedFile);
     upload.normalizedAt = new Date();
     upload.punchesPublishedAt = null;
     upload.publishedEmployees = 0;

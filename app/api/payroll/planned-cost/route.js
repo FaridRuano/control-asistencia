@@ -120,8 +120,8 @@ export async function GET(request) {
       dailyBaseHours: Number(rules?.dailyBaseHours) || 8,
     });
     const hourlyDivisor = monthlyBase.hourlyDivisor;
-    const supplementaryMultiplier = Number(rules?.supplementaryMultiplier) || 1.5;
-    const extraordinaryMultiplier = Number(rules?.extraordinaryMultiplier) || 2;
+    const supplementaryMultiplier = 0.5;
+    const extraordinaryMultiplier = 1;
     const rows = assignments.map((assignment) => {
       const salary = salaryByEmployee.get(assignment.employee?.toString?.() || "") || 0;
       const hourlyRate = salary / hourlyDivisor;

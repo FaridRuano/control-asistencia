@@ -62,21 +62,6 @@
   margin-top: 1rem;
 }
 
-.pendingState {
-  margin-top: 1rem;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.55rem;
-  border: 1px solid rgba(23, 66, 140, 0.12);
-  border-radius: 999px;
-  background: #f4f8ff;
-  color: #17428c;
-  padding: 0.62rem 0.85rem;
-  font-size: var(--font-size-xs);
-  font-weight: 700;
-  animation: pending-pulse 1.25s ease-in-out infinite;
-}
-
 .spinner {
   flex: 0 0 auto;
   animation: spin 780ms linear infinite;
@@ -144,17 +129,6 @@
 @keyframes spin {
   to {
     transform: rotate(360deg);
-  }
-}
-
-@keyframes pending-pulse {
-  0%,
-  100% {
-    opacity: 0.78;
-  }
-
-  50% {
-    opacity: 1;
   }
 }
 

@@ -368,6 +368,7 @@ img {
 
 .catalog-button-primary,
 .catalog-button-ghost,
+.catalog-button-neutral,
 .catalog-button-danger {
   position: relative;
   overflow: hidden;
@@ -456,6 +457,21 @@ img {
 
   &::after {
     background: rgba(23, 66, 140, 0.12);
+  }
+}
+
+.catalog-button-neutral {
+  border: 1px solid rgba(16, 33, 62, 0.22);
+  background: #111827;
+  color: white;
+
+  &:hover:not(:disabled) {
+    border-color: rgba(16, 33, 62, 0.38);
+    background: #1f2937;
+  }
+
+  &::after {
+    background: rgba(255, 255, 255, 0.16);
   }
 }
 

@@ -19,6 +19,30 @@ const employeeSchema = new Schema(
       trim: true,
       default: "",
     },
+    biometricAliases: {
+      type: [
+        {
+          branchCode: {
+            type: String,
+            trim: true,
+            uppercase: true,
+            default: "",
+          },
+          branchName: {
+            type: String,
+            trim: true,
+            uppercase: true,
+            default: "",
+          },
+          biometricCode: {
+            type: String,
+            trim: true,
+            default: "",
+          },
+        },
+      ],
+      default: [],
+    },
     fullName: {
       type: String,
       required: true,
@@ -52,6 +76,10 @@ const employeeSchema = new Schema(
       min: 0,
     },
     birthDate: {
+      type: Date,
+      default: null,
+    },
+    employmentStartDate: {
       type: Date,
       default: null,
     },
@@ -170,6 +198,11 @@ employeeSchema.index(
     },
   },
 );
+
+employeeSchema.index({
+  "biometricAliases.branchCode": 1,
+  "biometricAliases.biometricCode": 1,
+});
 
 const Employee =
   mongoose.models.Employee || mongoose.model("Employee", employeeSchema);
